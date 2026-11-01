@@ -1,0 +1,220 @@
+[0.064s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build', '--symlink-install', '--packages-up-to', 'jar_bringup']
+[0.064s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=True, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=22, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=['jar_bringup'], packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=None, packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, verb_parser=<colcon_defaults.argument_parser.defaults.DefaultArgumentsDecorator object at 0x7ce136490310>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x7ce136599a20>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x7ce136599a20>>)
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[0.156s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.156s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/sebastian/jar_ws/src/jar_robot'
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[0.156s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['cmake', 'python']
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'cmake'
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python'
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python_setup_py']
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python_setup_py'
+[0.162s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extensions ['ignore', 'ignore_ament_install']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extension 'ignore'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(build) ignored
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extensions ['ignore', 'ignore_ament_install']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extension 'ignore'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(install) ignored
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extensions ['ignore', 'ignore_ament_install']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extension 'ignore'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extension 'ignore_ament_install'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extensions ['colcon_pkg']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extension 'colcon_pkg'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extensions ['colcon_meta']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extension 'colcon_meta'
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extensions ['ros']
+[0.163s] Level 1:colcon.colcon_core.package_identification:_identify(jar_bringup) by extension 'ros'
+[0.164s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_bringup' with type 'ros.ament_python' and name 'jar_bringup'
+[0.164s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extensions ['ignore', 'ignore_ament_install']
+[0.164s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extension 'ignore'
+[0.164s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extension 'ignore_ament_install'
+[0.164s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extensions ['colcon_pkg']
+[0.164s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extension 'colcon_pkg'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extensions ['colcon_meta']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extension 'colcon_meta'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extensions ['ros']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_exploracion) by extension 'ros'
+[0.165s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_exploracion' with type 'ros.ament_python' and name 'jar_exploracion'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extensions ['ignore', 'ignore_ament_install']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extension 'ignore'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extension 'ignore_ament_install'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extensions ['colcon_pkg']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extension 'colcon_pkg'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extensions ['colcon_meta']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extension 'colcon_meta'
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extensions ['ros']
+[0.165s] Level 1:colcon.colcon_core.package_identification:_identify(jar_localizacion) by extension 'ros'
+[0.166s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_localizacion' with type 'ros.ament_python' and name 'jar_localizacion'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extensions ['ignore', 'ignore_ament_install']
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extension 'ignore'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extension 'ignore_ament_install'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extensions ['colcon_pkg']
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extension 'colcon_pkg'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extensions ['colcon_meta']
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extension 'colcon_meta'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extensions ['ros']
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_mision) by extension 'ros'
+[0.166s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_mision' with type 'ros.ament_python' and name 'jar_mision'
+[0.166s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extensions ['ignore', 'ignore_ament_install']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extension 'ignore'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extension 'ignore_ament_install'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extensions ['colcon_pkg']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extension 'colcon_pkg'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extensions ['colcon_meta']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extension 'colcon_meta'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extensions ['ros']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_navegacion) by extension 'ros'
+[0.167s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_navegacion' with type 'ros.ament_python' and name 'jar_navegacion'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extensions ['ignore', 'ignore_ament_install']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extension 'ignore'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extension 'ignore_ament_install'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extensions ['colcon_pkg']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extension 'colcon_pkg'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extensions ['colcon_meta']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extension 'colcon_meta'
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extensions ['ros']
+[0.167s] Level 1:colcon.colcon_core.package_identification:_identify(jar_percepcion) by extension 'ros'
+[0.168s] DEBUG:colcon.colcon_core.package_identification:Package 'jar_percepcion' with type 'ros.ament_python' and name 'jar_percepcion'
+[0.168s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extensions ['ignore', 'ignore_ament_install']
+[0.168s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extension 'ignore'
+[0.168s] Level 1:colcon.colcon_core.package_identification:_identify(log) ignored
+[0.168s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.168s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[0.168s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[0.168s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[0.168s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[0.186s] INFO:colcon.colcon_core.package_selection:Skipping package 'jar_percepcion' in 'jar_percepcion'
+[0.186s] INFO:colcon.colcon_core.package_selection:Skipping package 'jar_navegacion' in 'jar_navegacion'
+[0.186s] INFO:colcon.colcon_core.package_selection:Skipping package 'jar_mision' in 'jar_mision'
+[0.186s] INFO:colcon.colcon_core.package_selection:Skipping package 'jar_localizacion' in 'jar_localizacion'
+[0.186s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.187s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.188s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 15 installed packages in /home/sebastian/rosmaster_ws/install
+[0.188s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 2 installed packages in /home/sebastian/install
+[0.189s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 349 installed packages in /opt/ros/humble
+[0.190s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_target' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_clean_cache' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_clean_first' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'cmake_force_configure' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'ament_cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'catkin_cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_exploracion' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.215s] DEBUG:colcon.colcon_core.verb:Building package 'jar_exploracion' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion', 'merge_install': False, 'path': '/home/sebastian/jar_ws/src/jar_robot/jar_exploracion', 'symlink_install': True, 'test_result_base': None}
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_target' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_clean_cache' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_clean_first' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'cmake_force_configure' from command line to 'False'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'ament_cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'catkin_cmake_args' from command line to 'None'
+[0.215s] Level 5:colcon.colcon_core.verb:set package 'jar_bringup' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.215s] DEBUG:colcon.colcon_core.verb:Building package 'jar_bringup' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup', 'merge_install': False, 'path': '/home/sebastian/jar_ws/src/jar_robot/jar_bringup', 'symlink_install': True, 'test_result_base': None}
+[0.215s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.216s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.217s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/sebastian/jar_ws/src/jar_robot/jar_exploracion' with build type 'ament_python'
+[0.217s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_exploracion', 'ament_prefix_path')
+[0.219s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.219s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/ament_prefix_path.ps1'
+[0.220s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/ament_prefix_path.dsv'
+[0.221s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/ament_prefix_path.sh'
+[0.221s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.221s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.381s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/sebastian/jar_ws/src/jar_robot/jar_exploracion'
+[0.381s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.381s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.594s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: symlink_data, extract_messages, install_lib, bdist_dumb, setopt, test, rotate, upload, bdist_rpm, bdist_egg, build_ext, register, bdist_wheel, build_scripts, init_catalog, alias, build_py, upload_docs, dist_info, build_clib, install, bdist, check, install_headers, build, saveopts, update_catalog, egg_info, easy_install, install_egg_info, compile_catalog, develop, install_data, clean, install_scripts, sdist
+[0.769s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools 'develop' options: --verbose, --optimize, --record, --script-dir, --upgrade, --editable, --find-links, --index-url, --quiet, --version, --install-layout, --help, --site-dirs, --no-find-links, --always-unzip, --egg-path, --no-user-cfg, --dry-run, --zip-ok, --uninstall, --install-dir, --exclude-scripts, --build-directory, --force-installation-into-system-dir, --no-deps, --always-copy, --allow-hosts, --user, --local-snapshots-ok, --prefix, --multi-version
+[0.772s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion': PYTHONPATH=/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/build --no-deps symlink_data
+[1.035s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_exploracion', 'pythonpath_develop')
+[1.035s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/share/jar_exploracion/hook/pythonpath_develop.ps1'
+[1.035s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion' returned '0': PYTHONPATH=/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/build --no-deps symlink_data
+[1.036s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/share/jar_exploracion/hook/pythonpath_develop.dsv'
+[1.036s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/share/jar_exploracion/hook/pythonpath_develop.sh'
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion' for CMake module files
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion' for CMake config files
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib'
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/bin'
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/pkgconfig/jar_exploracion.pc'
+[1.038s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages'
+[1.038s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_exploracion', 'pythonpath')
+[1.039s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/pythonpath.ps1'
+[1.039s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/pythonpath.dsv'
+[1.039s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/hook/pythonpath.sh'
+[1.039s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/bin'
+[1.039s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(jar_exploracion)
+[1.040s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/package.ps1'
+[1.040s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/package.dsv'
+[1.041s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/package.sh'
+[1.041s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/package.bash'
+[1.041s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion/package.zsh'
+[1.042s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/colcon-core/packages/jar_exploracion)
+[1.042s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/sebastian/jar_ws/src/jar_robot/jar_bringup' with build type 'ament_python'
+[1.042s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_bringup', 'ament_prefix_path')
+[1.042s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/ament_prefix_path.ps1'
+[1.042s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/ament_prefix_path.dsv'
+[1.043s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/ament_prefix_path.sh'
+[1.043s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[1.043s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.203s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/sebastian/jar_ws/src/jar_robot/jar_bringup'
+[1.204s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[1.204s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.423s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: symlink_data, extract_messages, install_lib, bdist_dumb, setopt, test, rotate, upload, bdist_rpm, bdist_egg, build_ext, register, bdist_wheel, build_scripts, init_catalog, alias, build_py, upload_docs, dist_info, build_clib, install, bdist, check, install_headers, build, saveopts, update_catalog, egg_info, easy_install, install_egg_info, compile_catalog, develop, install_data, clean, install_scripts, sdist
+[1.594s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools 'develop' options: --verbose, --optimize, --record, --script-dir, --upgrade, --editable, --find-links, --index-url, --quiet, --version, --install-layout, --help, --site-dirs, --no-find-links, --always-unzip, --egg-path, --no-user-cfg, --dry-run, --zip-ok, --uninstall, --install-dir, --exclude-scripts, --build-directory, --force-installation-into-system-dir, --no-deps, --always-copy, --allow-hosts, --user, --local-snapshots-ok, --prefix, --multi-version
+[1.596s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup': AMENT_PREFIX_PATH=/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion:${AMENT_PREFIX_PATH} PYTHONPATH=/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib/python3.10/site-packages:/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion:/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/build --no-deps symlink_data
+[1.862s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_bringup', 'pythonpath_develop')
+[1.862s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup' returned '0': AMENT_PREFIX_PATH=/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion:${AMENT_PREFIX_PATH} PYTHONPATH=/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib/python3.10/site-packages:/home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion:/home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/build --no-deps symlink_data
+[1.863s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/share/jar_bringup/hook/pythonpath_develop.ps1'
+[1.864s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/share/jar_bringup/hook/pythonpath_develop.dsv'
+[1.865s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/share/jar_bringup/hook/pythonpath_develop.sh'
+[1.866s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup' for CMake module files
+[1.866s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup' for CMake config files
+[1.866s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/bin'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib/pkgconfig/jar_bringup.pc'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib/python3.10/site-packages'
+[1.867s] Level 1:colcon.colcon_core.shell:create_environment_hook('jar_bringup', 'pythonpath')
+[1.867s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/pythonpath.ps1'
+[1.867s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/pythonpath.dsv'
+[1.868s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/hook/pythonpath.sh'
+[1.868s] Level 1:colcon.colcon_core.environment:checking '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/bin'
+[1.868s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(jar_bringup)
+[1.868s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/package.ps1'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/package.dsv'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/package.sh'
+[1.870s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/package.bash'
+[1.870s] INFO:colcon.colcon_core.shell:Creating package script '/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/package.zsh'
+[1.870s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/colcon-core/packages/jar_bringup)
+[1.870s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[1.871s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[1.871s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[1.871s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[1.875s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[1.875s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[1.875s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[1.887s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[1.888s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/sebastian/jar_ws/src/jar_robot/install/local_setup.ps1'
+[1.889s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/sebastian/jar_ws/src/jar_robot/install/_local_setup_util_ps1.py'
+[1.890s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/sebastian/jar_ws/src/jar_robot/install/setup.ps1'
+[1.891s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/sebastian/jar_ws/src/jar_robot/install/local_setup.sh'
+[1.891s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/sebastian/jar_ws/src/jar_robot/install/_local_setup_util_sh.py'
+[1.891s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/sebastian/jar_ws/src/jar_robot/install/setup.sh'
+[1.892s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/sebastian/jar_ws/src/jar_robot/install/local_setup.bash'
+[1.892s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/sebastian/jar_ws/src/jar_robot/install/setup.bash'
+[1.893s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/sebastian/jar_ws/src/jar_robot/install/local_setup.zsh'
+[1.893s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/sebastian/jar_ws/src/jar_robot/install/setup.zsh'

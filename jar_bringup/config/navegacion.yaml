@@ -1,0 +1,38 @@
+amcl:
+  ros__parameters:
+    global_frame_id: map
+    odom_frame_id: odom
+    base_frame_id: base_footprint
+    scan_topic: scan
+    robot_model_type: nav2_amcl::OmniMotionModel
+    tf_broadcast: true
+    set_initial_pose: false
+    min_particles: 500
+    max_particles: 2000
+    laser_model_type: likelihood_field
+    update_min_d: 0.1
+    update_min_a: 0.1
+
+map_server:
+  ros__parameters:
+    frame_id: map
+    topic_name: map
+
+grilla_cobertura:
+  ros__parameters:
+    map_frame: map
+    base_frame: base_footprint
+    factor_escala: 4
+    timeout_scan_s: 0.5
+    tiempo_asentamiento_s: 3.0
+
+explorador:
+  ros__parameters:
+    map_frame: map
+    base_frame: base_footprint
+    velocidad_maxima: 0.3
+    timeout_sin_avance_s: 15.0
+    radio_robot: 0.18
+    margen_seguridad: 0.05
+    timeout_scan_s: 0.5
+    tiempo_asentamiento_s: 3.0

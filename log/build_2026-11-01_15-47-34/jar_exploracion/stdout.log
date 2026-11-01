@@ -1,0 +1,23 @@
+running develop
+running egg_info
+creating jar_exploracion.egg-info
+writing jar_exploracion.egg-info/PKG-INFO
+writing dependency_links to jar_exploracion.egg-info/dependency_links.txt
+writing entry points to jar_exploracion.egg-info/entry_points.txt
+writing requirements to jar_exploracion.egg-info/requires.txt
+writing top-level names to jar_exploracion.egg-info/top_level.txt
+writing manifest file 'jar_exploracion.egg-info/SOURCES.txt'
+reading manifest file 'jar_exploracion.egg-info/SOURCES.txt'
+writing manifest file 'jar_exploracion.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/python3.10/site-packages/jar-exploracion.egg-link (link to .)
+Installing explorador script to /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/jar_exploracion
+Installing grilla_cobertura script to /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/lib/jar_exploracion
+
+Installed /home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion
+running symlink_data
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/ament_index
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/ament_index/resource_index
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/ament_index/resource_index/packages
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/resource/jar_exploracion -> /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/ament_index/resource_index/packages
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_exploracion/package.xml -> /home/sebastian/jar_ws/src/jar_robot/install/jar_exploracion/share/jar_exploracion

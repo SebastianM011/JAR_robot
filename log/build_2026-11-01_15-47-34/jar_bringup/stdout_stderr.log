@@ -1,0 +1,25 @@
+running develop
+running egg_info
+creating jar_bringup.egg-info
+writing jar_bringup.egg-info/PKG-INFO
+writing dependency_links to jar_bringup.egg-info/dependency_links.txt
+writing entry points to jar_bringup.egg-info/entry_points.txt
+writing requirements to jar_bringup.egg-info/requires.txt
+writing top-level names to jar_bringup.egg-info/top_level.txt
+writing manifest file 'jar_bringup.egg-info/SOURCES.txt'
+reading manifest file 'jar_bringup.egg-info/SOURCES.txt'
+writing manifest file 'jar_bringup.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/lib/python3.10/site-packages/jar-bringup.egg-link (link to .)
+
+Installed /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup
+running symlink_data
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/ament_index
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/ament_index/resource_index
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/ament_index/resource_index/packages
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/resource/jar_bringup -> /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/ament_index/resource_index/packages
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/package.xml -> /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/launch
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/launch/navegacion.launch.py -> /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/launch
+creating /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/config
+symbolically linking /home/sebastian/jar_ws/src/jar_robot/build/jar_bringup/config/navegacion.yaml -> /home/sebastian/jar_ws/src/jar_robot/install/jar_bringup/share/jar_bringup/config

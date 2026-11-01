@@ -1,0 +1,4 @@
+[console_scripts]
+explorador = jar_exploracion.explorador:main
+grilla_cobertura = jar_exploracion.grilla_cobertura:main
+
