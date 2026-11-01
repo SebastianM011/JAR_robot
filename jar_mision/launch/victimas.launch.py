@@ -9,7 +9,8 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """/scan_rojo -> detector de obstáculos -> /objetos_rojos -> /victimas.
+    """
+    Encadena /scan_rojo -> detector de obstáculos -> /objetos_rojos -> /victimas.
 
     Requiere /likelihood_map y la transformada map -> odom (por ejemplo,
     con jar_localizacion).

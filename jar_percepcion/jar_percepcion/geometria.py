@@ -19,7 +19,8 @@ def cuaternion_a_rotacion(x, y, z, w):
 
 
 def puntos_laser_a_pixeles(rangos, angulos, rotacion, traslacion, fx, fy, cx, cy):
-    """Proyecta los puntos del lidar en la imagen con el modelo pinhole.
+    """
+    Proyecta los puntos del lidar en la imagen con el modelo pinhole.
 
     Devuelve (u, v, adelante); u y v no tienen sentido donde adelante es False.
     """
@@ -35,7 +36,7 @@ def puntos_laser_a_pixeles(rangos, angulos, rotacion, traslacion, fx, fy, cx, cy
 
 
 def pixeles_en_mascara(u, v, adelante, mascara):
-    """True para los puntos que caen dentro de la imagen sobre un pixel activo."""
+    """Marca los puntos que caen dentro de la imagen sobre un pixel activo."""
     alto, ancho = mascara.shape[:2]
     with np.errstate(invalid='ignore'):
         dentro = adelante & (u >= 0) & (u < ancho) & (v >= 0) & (v < alto)
@@ -47,7 +48,8 @@ def pixeles_en_mascara(u, v, adelante, mascara):
 
 
 def agrupar_en_rachas(booleanos):
-    """Índices contiguos en True, tratando el scan como circular.
+    """
+    Agrupa los índices contiguos en True, tratando el scan como circular.
 
     [F, F, T, T, T, F, T, T, F] -> [[2, 3, 4], [6, 7]].
     """

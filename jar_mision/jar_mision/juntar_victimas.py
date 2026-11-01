@@ -14,6 +14,8 @@ from jar_mision.victimas import AgrupadorVictimas, centro_desde_cara
 
 class JuntarVictimas(Node):
     """
+    Reporta una posición por caja roja en /victimas.
+
     Escucha /objetos_rojos (detector_obstaculos sobre /scan_rojo): un punto
     en map por cada racha roja, ubicado sobre la cara visible de la caja.
     Lleva cada punto al centro, agrupa por caja y publica la mediana de

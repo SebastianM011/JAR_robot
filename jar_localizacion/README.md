@@ -10,6 +10,7 @@ de odometría de la semana 10. La teoría está en el README de ese workshop.
 
 | Ejecutable | Entrada | Salida |
 | --- | --- | --- |
+| `publicar_mapa` | `yaml_filename` (mapa de map_server) | `/map` (transient local), sin Nav2 |
 | `campo_verosimilitud` | `/map` | `/likelihood_map` (transient local) |
 | `localizador` | `/likelihood_map`, `/scan`, `/odom`, `initialpose` | TF `map -> odom`, `/particlecloud`, `/camino_odom`, `/camino_corregido`, `/camino_real` (solo simulador) |
 | `medir_odometria` | `/odom`, `/imu/data`, `/scan` | Log con giro odom/IMU y avance odom/lidar trasero |
@@ -22,7 +23,7 @@ sin ROS, y se prueban en `test/`.
 ## Uso
 
 ```bash
-ros2 launch jar_localizacion localizacion.launch.py            # map_server + filtro
+ros2 launch jar_localizacion localizacion.launch.py            # mapa + filtro, sin Nav2
 ros2 launch jar_bringup navegacion.launch.py localizador:=jar  # en lugar de AMCL
 ros2 launch jar_bringup robot_real.launch.py                   # bag o robot real
 ```

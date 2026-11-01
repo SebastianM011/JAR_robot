@@ -2,11 +2,6 @@
 # Con el filtro offline sobre el bag, el scan queda a 0-5 cm de las paredes
 # durante todo el recorrido; con escalas 1.0 se pierde después de los giros.
 
-map_server:
-  ros__parameters:
-    frame_id: map
-    topic_name: map
-
 campo_verosimilitud:
   ros__parameters:
     sigma_sensor: 0.2

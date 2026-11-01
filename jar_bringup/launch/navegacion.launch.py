@@ -68,7 +68,7 @@ def generate_launch_description():
 
     localization_nodes = [
         Node(package='nav2_map_server', executable='map_server', name='map_server',
-             output='screen', condition=IfCondition(config('localizacion')),
+             output='screen', condition=localizador_es('amcl'),
              parameters=[config('params_file'), clock, {'yaml_filename': config('map')}]),
         Node(package='nav2_amcl', executable='amcl', name='amcl', output='screen',
              condition=localizador_es('amcl'),
@@ -77,10 +77,10 @@ def generate_launch_description():
              name='lifecycle_manager_localizacion', output='screen',
              condition=localizador_es('amcl'),
              parameters=[clock, {'autostart': True, 'node_names': ['map_server', 'amcl']}]),
-        Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
-             name='lifecycle_manager_localizacion', output='screen',
-             condition=localizador_es('jar'),
-             parameters=[clock, {'autostart': True, 'node_names': ['map_server']}]),
+        # El localizador propio no necesita Nav2: el mapa lo publica jar_localizacion.
+        Node(package='jar_localizacion', executable='publicar_mapa', name='publicar_mapa',
+             output='screen', condition=localizador_es('jar'),
+             parameters=[clock, {'yaml_filename': config('map')}]),
         Node(package='jar_localizacion', executable='campo_verosimilitud',
              name='campo_verosimilitud', output='screen', condition=localizador_es('jar'),
              parameters=[config('params_file'), clock]),

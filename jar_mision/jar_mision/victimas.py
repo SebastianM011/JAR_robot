@@ -6,7 +6,8 @@ import numpy as np
 
 
 def centro_desde_cara(robot, deteccion, mitad_caja):
-    """Corre la detección de la cara visible media caja hacia adentro.
+    """
+    Corre la detección de la cara visible media caja hacia adentro.
 
     Devuelve None si la detección coincide con la posición del robot.
     """
@@ -19,7 +20,8 @@ def centro_desde_cara(robot, deteccion, mitad_caja):
 
 
 class AgrupadorVictimas:
-    """Junta detecciones cercanas y decide cuándo reportar cada grupo.
+    """
+    Junta detecciones cercanas y decide cuándo reportar cada grupo.
 
     La mediana del grupo ignora las pocas detecciones que caen lejos de la
     caja, que con un promedio la desplazarían.

@@ -11,7 +11,8 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Reemplaza la navegación propia por los nodos estándar de Nav2.
+    """
+    Reemplaza la navegación propia por los nodos estándar de Nav2.
 
     Con `localizacion:=false` no inicia map_server ni AMCL, para usar
     jar_localizacion u otro proveedor de /map y map -> odom.

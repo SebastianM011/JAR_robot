@@ -49,7 +49,8 @@ def sembrar_particulas(x, y, theta, dispersion_xy, dispersion_theta, n, rng=np.r
 
 def mover_particulas(particulas, dx, dy, dtheta, theta0, gammas,
                      escala_avance=1.0, escala_giro=1.0, rng=np.random):
-    """Modelo de movimiento odométrico mecanum con ruido por partícula.
+    """
+    Modelo de movimiento odométrico mecanum con ruido por partícula.
 
     El desplazamiento (dx, dy) llega en el frame odom y se expresa en el
     frame del robot al inicio del paso. Las gammas son varianzas.
@@ -78,7 +79,8 @@ def mover_particulas(particulas, dx, dy, dtheta, theta0, gammas,
 
 
 def pesar_particulas(particulas, puntos, campo, resolucion, origen_x, origen_y):
-    """Pesos normalizados según cuánto calza el scan contra el campo.
+    """
+    Pesos normalizados según cuánto calza el scan contra el campo.
 
     `puntos` es un array Mx2 en el frame del robot. Los puntos fuera del
     mapa o en celdas de probabilidad nula aportan una probabilidad mínima.

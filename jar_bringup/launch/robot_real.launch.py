@@ -10,10 +10,11 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    """Sirve para el robot o para el bag (`ros2 bag play ... --clock`).
+    """
+    Sirve para el robot o para el bag (`ros2 bag play ... --clock`).
 
     No inicia drivers: /scan, /odom, la cámara y la TF odom -> base_footprint
-    los provee el robot o el bag.
+    los provee el robot o el bag. No requiere Nav2.
     """
     def config(name):
         return LaunchConfiguration(name)
@@ -37,11 +38,8 @@ def generate_launch_description():
     params = [config('params_file'), clock]
     victimas = IfCondition(config('victimas'))
     return LaunchDescription(arguments + [
-        Node(package='nav2_map_server', executable='map_server', name='map_server',
-             output='screen', parameters=params + [{'yaml_filename': config('map')}]),
-        Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
-             name='lifecycle_manager_mapa', output='screen',
-             parameters=[clock, {'autostart': True, 'node_names': ['map_server']}]),
+        Node(package='jar_localizacion', executable='publicar_mapa', name='publicar_mapa',
+             output='screen', parameters=[clock, {'yaml_filename': config('map')}]),
         Node(package='jar_localizacion', executable='campo_verosimilitud',
              name='campo_verosimilitud', output='screen', parameters=params),
         Node(package='jar_localizacion', executable='localizador',

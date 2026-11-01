@@ -34,6 +34,8 @@ def normalizar_angulo(angulo):
 
 class Evasor(Node):
     """
+    Máquina de estados avanzar/girar sobre la huella del robot.
+
     Avanza mientras la huella del robot tenga `distancia_choque_m` libres
     adelante y, si no, gira en el lugar un ángulo fijo medido con la
     odometría. Sin scan, sin TF o con un scan sin datos, frena. Publica en
@@ -84,7 +86,7 @@ class Evasor(Node):
         self.yaw_actual = yaw_de_quaternion(msg.pose.pose.orientation)
 
     def corredor_bloqueado(self):
-        """True si hay obstáculo adelante; None si no se puede decidir."""
+        """Indica si hay obstáculo adelante; None si no se puede decidir."""
         scan = self.ultimo_scan
         if scan is None:
             return None

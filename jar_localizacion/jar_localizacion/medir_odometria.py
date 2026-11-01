@@ -26,6 +26,8 @@ def segundos(stamp):
 
 class MedirOdometria(Node):
     """
+    Compara /odom contra el IMU (giro) y el lidar trasero (avance).
+
     Cada PERIODO_REPORTE_S segundos (del bag) imprime el giro acumulado
     según /odom y según el IMU, su cociente, cuánto avanzó el robot según
     /odom y la distancia que mide el lidar hacia atrás del robot.

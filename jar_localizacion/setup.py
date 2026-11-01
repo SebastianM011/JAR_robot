@@ -32,6 +32,7 @@ setup(
             'localizador = jar_localizacion.localizador:main',
             'medir_odometria = jar_localizacion.medir_odometria:main',
             'odom_corregida = jar_localizacion.odom_corregida:main',
+            'publicar_mapa = jar_localizacion.publicar_mapa:main',
         ],
     },
 )

@@ -13,6 +13,8 @@ from jar_localizacion.odometria import aplicar_paso, paso_en_frame_robot
 
 class OdomCorregida(Node):
     """
+    Publica el camino de /odom con las escalas aplicadas.
+
     Solo para mirar la corrección en RViz: no republica /odom ni toca la
     transformada odom -> base_footprint. No correr junto al localizador,
     que publica en los mismos tópicos.

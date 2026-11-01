@@ -25,6 +25,8 @@ from jar_percepcion.vision import PARAMETROS_ROJO, mascara_rojo
 
 class DetectorScanColor(Node):
     """
+    Publica en /scan_rojo los rayos del lidar que caen sobre rojo.
+
     Proyecta cada punto del /scan sobre la imagen (tf lidar -> cámara e
     intrínsecos de camera_info) y conserva solo los que caen sobre rojo.
     Mientras el robot gira más rápido que `giro_maximo`, imagen y scan no

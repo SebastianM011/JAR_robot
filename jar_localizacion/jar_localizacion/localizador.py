@@ -43,9 +43,11 @@ def yaw_a_quaternion(yaw: float) -> Quaternion:
 
 class Localizador(Node):
     """
-    Predice con cada /odom, corrige con cada /scan contra /likelihood_map
-    y publica la transformada map -> odom. `initialpose` (2D Pose Estimate
-    de RViz) vuelve a sembrar las partículas alrededor de la pose marcada.
+    Filtro de partículas que publica la transformada map -> odom.
+
+    Predice con cada /odom y corrige con cada /scan contra /likelihood_map.
+    `initialpose` (2D Pose Estimate de RViz) vuelve a sembrar las partículas
+    alrededor de la pose marcada.
     """
 
     def __init__(self):
@@ -218,7 +220,7 @@ class Localizador(Node):
         publisher.publish(camino_msg)
 
     def publicar_transformada(self, pose_estimada):
-        """map -> odom = (map -> base) * inversa(odom -> base)."""
+        """Publica map -> odom = (map -> base) * inversa(odom -> base)."""
         x, y, theta = componer_poses(pose_estimada, invertir_pose(self.ultimo_odom))
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()

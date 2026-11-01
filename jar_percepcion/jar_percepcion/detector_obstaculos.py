@@ -30,6 +30,8 @@ QOS_MAPA = QoSProfile(
 
 class DetectorObstaculos(Node):
     """
+    Publica en map los objetos del scan que el mapa no tiene.
+
     Compara cada punto del /scan contra /likelihood_map, agrupa en rachas
     contiguas los que el mapa no esperaba y publica el centro de cada una.
     Para ubicar cajas rojas se remapea scan a scan_rojo y se usa

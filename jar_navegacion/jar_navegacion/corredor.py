@@ -8,7 +8,7 @@ from jar_exploracion.seguridad import distancia_huella
 def mascara_corredor(rangos, angulos, range_min, range_max, tx, ty, yaw,
                      largo, ancho, margen, distancia):
     """
-    True en los rayos que chocarían si la huella avanza `distancia` en +x.
+    Marca los rayos que chocarían si la huella avanza `distancia` en +x.
 
     El scan se lleva a base_footprint con (tx, ty, yaw). Devuelve None si no
     hay ninguna medición ni rayos sin retorno: eso no demuestra espacio libre.

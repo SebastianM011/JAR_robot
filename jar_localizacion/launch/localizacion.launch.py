@@ -1,4 +1,4 @@
-"""Inicia map_server y el filtro de partículas propio."""
+"""Inicia el mapa y el filtro de partículas propio, sin Nav2."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -20,7 +20,7 @@ def generate_launch_description():
     arguments = [
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('mapa', default_value='true',
-                              description='Iniciar map_server; false si /map ya existe'),
+                              description='Publicar /map; false si ya existe'),
         DeclareLaunchArgument('map', default_value=share(
             'yahboom_rosmaster_gazebo', 'maps', 'laberinto_simple.yaml')),
         DeclareLaunchArgument('params_file', default_value=share(
@@ -29,13 +29,9 @@ def generate_launch_description():
     clock = {'use_sim_time': ParameterValue(config('use_sim_time'), value_type=bool)}
     params = [config('params_file'), clock]
     return LaunchDescription(arguments + [
-        Node(package='nav2_map_server', executable='map_server', name='map_server',
+        Node(package='jar_localizacion', executable='publicar_mapa', name='publicar_mapa',
              output='screen', condition=IfCondition(config('mapa')),
-             parameters=params + [{'yaml_filename': config('map')}]),
-        Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
-             name='lifecycle_manager_mapa', output='screen',
-             condition=IfCondition(config('mapa')),
-             parameters=[clock, {'autostart': True, 'node_names': ['map_server']}]),
+             parameters=[clock, {'yaml_filename': config('map')}]),
         Node(package='jar_localizacion', executable='campo_verosimilitud',
              name='campo_verosimilitud', output='screen', parameters=params),
         Node(package='jar_localizacion', executable='localizador',
