@@ -98,3 +98,39 @@ defecto; al usar un simulador externo se puede activar con
 El seguimiento solo salta waypoints cuando el segmento hacia el siguiente
 permanece en el mapa inflado y no corta esquinas de obstáculos. La protección
 de deslizamiento no corrige por sí sola errores de AMCL, del mapa o del chasis.
+
+## Pasillos estrechos y control revisado
+
+La planificación usa ahora una huella rectangular orientada de 0.37 × 0.24 m,
+que envuelve chasis y ruedas, con 0.05 m de margen. Sustituye `radio_robot`.
+`subdivisiones_mapa=2` permite centrar mejor el robot entre celdas del mapa
+original sin adelgazar los obstáculos.
+`ganancia_repulsiva` y `radio_repulsion` ya no se utilizan: se eliminó la suma de
+fuerzas de los rayos. El comando, incluido el suavizado, pasa por comprobación
+predictiva de huella, mapa y scan. La velocidad cerca de paredes queda limitada
+por `velocidad_pasillo` (0.10 m/s); `velocidad_maxima` sigue en 0.30 m/s.
+
+La geometría tiene en cuenta la orientación actual. No ordena giros autónomos para
+entrar de frente en pasos que solo admiten otra orientación. No se fuerza el paso
+si no cabe con el margen o si el láser detecta un obstáculo.
+
+La revisión y las pruebas reproducibles se describen en
+`../jar_exploracion/docs/auditoria_exploracion.md`. Falta validar en Gazebo el paso
+concreto que originó el atasco; las pruebas cinemáticas no simulan sus contactos.
+
+## Finalización por porcentaje
+
+`porcentaje_objetivo` es el porcentaje de celdas libres de la grilla de cobertura
+que debe observar el láser para finalizar la misión. Paredes y desconocidos no
+entran en el denominador. Por defecto es **98%**. Al alcanzarlo, publica
+`terminado` en `/estado`, cancela la ruta pendiente, elimina camino y destino,
+y publica velocidad cero. `100` exige cobertura completa.
+
+```bash
+ros2 launch jar_bringup navegacion.launch.py porcentaje_objetivo:=90
+```
+
+Se combina con `world` y `map` para cualquier escenario. Consultar el valor actual
+con `ros2 topic echo /porcentaje_cobertura --once`. El umbral admite valores
+mayores que 0 y hasta 100. Los estados de bloqueo por deslizamiento conservan
+su prioridad: no se declara éxito mientras la localización está invalidada.

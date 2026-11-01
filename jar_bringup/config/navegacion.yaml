@@ -31,8 +31,15 @@ explorador:
     map_frame: map
     base_frame: base_footprint
     velocidad_maxima: 0.3
+    # Envuelve el chasis desplazado y las ruedas esféricas del URDF de Gazebo.
+    largo_robot: 0.37
+    ancho_robot: 0.24
+    timeout_pose_s: 0.5
+    velocidad_pasillo: 0.10
+    horizonte_colision_s: 0.8
+    desaceleracion_segura: 0.4
+    subdivisiones_mapa: 2
     timeout_sin_avance_s: 15.0
-    radio_robot: 0.18
     margen_seguridad: 0.05
     timeout_scan_s: 0.5
     tiempo_asentamiento_s: 3.0

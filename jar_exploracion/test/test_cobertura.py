@@ -35,6 +35,7 @@ def grilla(monkeypatch):
     nodo.libre_fino = None
     nodo.cubierta = None
     nodo.ultimo_scan = None
+    nodo.movimiento_invalido = False
     nodo.map_frame = 'map'
     nodo.timeout_scan_s = 0.5
     nodo.distancia_minima_valida = 0.0
@@ -100,3 +101,39 @@ def test_rechaza_scan_vencido_y_rangos_invalidos(grilla):
     nodo.momento_scan = nodo.get_clock().now() - Duration(seconds=2)
     nodo.marcar_cobertura()
     assert not np.any(nodo.cubierta)
+
+
+def test_deslizamiento_invalida_cobertura(grilla):
+    """No sigue marcando zonas usando una localización que acaba de divergir."""
+    from std_msgs.msg import String
+
+    nodo, _ = grilla
+    nodo.cubierta[0, 0] = True
+    nodo.recibir_estado(String(data='bloqueado_deslizamiento'))
+    assert not nodo.cubierta.any()
+    assert not nodo.pose_inicial_confirmada
+    assert nodo.movimiento_invalido
+    nodo.recibir_estado(String(data='inicializando'))
+    assert not nodo.movimiento_invalido
+    assert not nodo.pose_inicial_confirmada
+
+
+def test_cobertura_no_atraviesa_esquina_diagonal(grilla):
+    """Un rayo diagonal no se cuela por el contacto entre dos obstáculos."""
+    from sensor_msgs.msg import LaserScan
+
+    nodo, _ = grilla
+    nodo.libre_fino[2, 1] = False
+    tf = nodo.tf_buffer.lookup_transform.return_value
+    tf.transform.translation.x = 0.5
+    tf.transform.translation.y = 1.5
+    scan = LaserScan()
+    scan.header.frame_id = 'laser'
+    scan.range_min = 0.05
+    scan.range_max = 10.0
+    scan.angle_min = math.pi / 4
+    scan.ranges = [math.inf]
+    nodo.recibir_scan(scan)
+    nodo.marcar_cobertura()
+    assert nodo.cubierta[1, 0]
+    assert not nodo.cubierta[2, 1]

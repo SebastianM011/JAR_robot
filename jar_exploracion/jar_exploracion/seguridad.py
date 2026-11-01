@@ -1,0 +1,105 @@
+"""Geometría y comprobación predictiva de traslación para el X3 holonómico."""
+
+import math
+
+import numpy as np
+from scipy import ndimage
+
+
+def espacio_transitable(datos, resolucion, largo, ancho, margen, yaw=0.0):
+    """
+    Infla obstáculos con una huella rectangular y el área de cada píxel.
+
+    Largo y ancho envuelven todas las colisiones respecto de base_footprint.
+    Yaw se expresa respecto de los ejes del mapa. El exterior es ocupado.
+    No permite cambiar la orientación durante una traslación.
+    """
+    if (np.ndim(datos) != 2 or not np.size(datos)
+            or not all(math.isfinite(v) for v in (resolucion, largo, ancho, margen, yaw))
+            or min(resolucion, largo, ancho) <= 0 or margen < 0):
+        raise ValueError('Mapa y dimensiones de huella inválidos')
+    c, s = math.cos(yaw), math.sin(yaw)
+    # Soporte del cuadrado de ocupación sobre los ejes del robot.
+    pixel = resolucion * (abs(c) + abs(s)) / 2
+    hx, hy = largo / 2 + margen + pixel, ancho / 2 + margen + pixel
+    radio = math.ceil(math.hypot(hx, hy) / resolucion)
+    fy, fx = np.mgrid[-radio:radio + 1, -radio:radio + 1] * resolucion
+    bx, by = c * fx + s * fy, -s * fx + c * fy
+    estructura = (np.abs(bx) <= hx + 1e-9) & (np.abs(by) <= hy + 1e-9)
+    ocupado = np.asarray(datos) != 0
+    return ~ndimage.binary_dilation(ocupado, structure=estructura, border_value=1)
+
+
+def puntos_scan(scan, tx=0.0, ty=0.0, yaw=0.0):
+    """Transforma impactos válidos del láser al marco de la base."""
+    rangos = np.asarray(scan.ranges, dtype=float)
+    if (not all(math.isfinite(v) for v in (tx, ty, yaw))
+            or not math.isfinite(scan.range_min) or not math.isfinite(scan.range_max)
+            or not 0 <= scan.range_min < scan.range_max
+            or not math.isfinite(scan.angle_min) or not math.isfinite(scan.angle_increment)):
+        return None
+    angulos = scan.angle_min + np.arange(len(rangos)) * scan.angle_increment + yaw
+    validos = (np.isfinite(rangos) & (rangos > 0)
+               & (rangos >= scan.range_min) & (rangos <= scan.range_max))
+    # Un scan sin mediciones ni rayos sin retorno no demuestra espacio libre.
+    if not np.any(validos) and not np.any(np.isposinf(rangos)):
+        return None
+    return np.column_stack((tx + rangos[validos] * np.cos(angulos[validos]),
+                            ty + rangos[validos] * np.sin(angulos[validos])))
+
+
+def distancia_huella(puntos, largo, ancho):
+    """Distancia firmada a una caja centrada: negativa dentro del chasis."""
+    q = np.abs(np.asarray(puntos)) - np.array([largo / 2, ancho / 2])
+    return np.linalg.norm(np.maximum(q, 0), axis=1) + np.minimum(np.max(q, axis=1), 0)
+
+
+def regular_traslacion(velocidad, puntos, largo, ancho, margen, velocidad_maxima,
+                       mapa_seguro, horizonte=0.8, paso=0.05, reaccion=0.15,
+                       desaceleracion=0.4, velocidad_pasillo=0.10):
+    """
+    Escala una orden sin desviarla y valida huella, mapa y distancia de frenado.
+
+    mapa_seguro recibe desplazamientos (dx, dy) en base_footprint y debe aceptar
+    el segmento completo desde el origen. El barrido usa pasos espaciales de
+    hasta 5 mm para no saltar un obstáculo entre dos muestras.
+    """
+    v = np.asarray(velocidad, dtype=float)
+    if (v.shape != (2,) or not np.all(np.isfinite(v)) or puntos is None
+            or velocidad_maxima <= 0 or desaceleracion <= 0):
+        return (0.0, 0.0), 'datos_invalidos'
+    puntos = np.asarray(puntos, dtype=float).reshape(-1, 2)
+    if not np.all(np.isfinite(puntos)):
+        return (0.0, 0.0), 'datos_invalidos'
+    modulo = np.linalg.norm(v)
+    if modulo < 1e-6:
+        return (0.0, 0.0), 'sin_orden'
+    if modulo > velocidad_maxima:
+        v *= velocidad_maxima / modulo
+    separacion = float(np.min(distancia_huella(puntos, largo, ancho))) if len(puntos) else math.inf
+    # No generar la repulsión lateral que cancela o deforma el seguimiento.
+    limite = velocidad_maxima
+    if separacion < margen + 0.10:
+        limite = min(limite, velocidad_pasillo)
+    modulo = np.linalg.norm(v)
+    if modulo > limite:
+        v *= limite / modulo
+    for escala in (1.0, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125):
+        candidata = v * escala
+        rapidez = float(np.linalg.norm(candidata))
+        duracion = max(horizonte, reaccion + rapidez / (2 * desaceleracion))
+        muestras = max(2, math.ceil(duracion / paso), math.ceil(rapidez * duracion / 0.005))
+        libre = True
+        for t in np.linspace(0.0, duracion, muestras + 1):
+            delta = candidata * t
+            if not mapa_seguro(float(delta[0]), float(delta[1])):
+                libre = False
+                break
+            # Medio paso espacial cubre el intervalo entre las muestras.
+            if len(puntos) and np.any(distancia_huella(puntos - delta, largo, ancho)
+                                      < margen + rapidez * duracion / muestras / 2):
+                libre = False
+                break
+        if libre:
+            return tuple(map(float, candidata)), 'avance' if escala == 1 else 'velocidad_reducida'
+    return (0.0, 0.0), 'obstaculo_o_margen'

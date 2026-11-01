@@ -23,6 +23,8 @@ def generate_launch_description():
         DeclareLaunchArgument('localizacion', default_value='true',
                               description='Iniciar map_server y AMCL provisionales'),
         DeclareLaunchArgument('exploracion', default_value='true'),
+        DeclareLaunchArgument('porcentaje_objetivo', default_value='98.0',
+                              description='Porcentaje de celdas libres cubiertas para terminar'),
         DeclareLaunchArgument('use_sim_time', default_value=config('simulacion')),
         DeclareLaunchArgument('verificar_movimiento_simulado',
                               default_value=config('simulacion')),
@@ -75,6 +77,7 @@ def generate_launch_description():
         package='jar_exploracion', executable='explorador', name='explorador',
         output='screen', condition=IfCondition(config('exploracion')),
         parameters=[config('params_file'), clock, {
+            'porcentaje_objetivo': ParameterValue(config('porcentaje_objetivo'), value_type=float),
             'verificar_movimiento_simulado': ParameterValue(
                 config('verificar_movimiento_simulado'), value_type=bool)}],
         remappings=[('cmd_vel', config('cmd_vel_topic'))])

@@ -6,9 +6,8 @@ import numpy as np
 import pytest
 
 pytest.importorskip('rclpy')
-from nav_msgs.msg import MapMetaData
-
-from jar_exploracion.explorador import Explorador
+MapMetaData = pytest.importorskip('nav_msgs.msg').MapMetaData
+Explorador = pytest.importorskip('jar_exploracion.explorador').Explorador
 
 
 @pytest.mark.parametrize('yaw', [0.0, 0.7])
@@ -68,6 +67,9 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.get_logger = lambda: Mock()
     nodo.estado = ESTADO_EXPLORANDO
     nodo.no_cubiertas = np.array([[True, False]])
+    nodo.total_celdas_libres = 0
+    nodo.celdas_cubiertas = 0
+    nodo.porcentaje_objetivo = 95.0
     nodo.zonas_sin_destino = {(0, 0)}
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_SIN_DESTINOS
@@ -76,6 +78,7 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_EXPLORANDO
     nodo.no_cubiertas[:] = False
+    nodo.total_celdas_libres = nodo.celdas_cubiertas = 1
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_TERMINADO
 

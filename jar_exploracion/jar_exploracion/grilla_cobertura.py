@@ -12,6 +12,7 @@ from rclpy.time import Time
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PoseWithCovarianceStamped, Quaternion
+from std_msgs.msg import String
 
 from tf2_ros import Buffer, TransformListener
 
@@ -25,30 +26,7 @@ def yaw_de_quaternion(q: Quaternion) -> float:
 
 
 class GrillaCobertura(Node):
-    """
-    Construye, a partir del mapa estático de map_server, una segunda
-    grilla propia de "cubierto / no cubierto", a una resolución más gruesa
-    (factor_escala celdas del mapa original por lado, por cada celda de
-    cobertura). Por cada rayo del /scan, traza la línea (Bresenham) entre
-    la celda del robot y la celda donde terminó el rayo, y marca como
-    cubiertas todas las celdas libres que esa línea atraviesa — no un
-    radio fijo alrededor del robot, que ignoraría las paredes y marcaría
-    como "visto" lo que en realidad está oculto detrás de un obstáculo.
-
-    Publica la grilla resultante como su propio OccupancyGrid
-    (`grilla_cobertura`): 0 = celda libre ya cubierta, 100 = celda libre
-    todavía sin cubrir, -1 = celda ocupada o fuera del mapa (no se
-    dibuja). Con "Color Scheme: costmap" en el display de Map de RViz,
-    eso se ve como una zona que pasa de rojo a verde a medida que el
-    robot la recorre.
-
-    No marca nada hasta que un humano confirma la pose inicial con "2D
-    Pose Estimate" en RViz (mismo tópico `initialpose` que usa
-    `localizador` para re-sembrar el filtro de partículas) -- si se
-    empieza a marcar cobertura con una pose todavía sin converger, esas
-    marcas quedan mal para siempre: a diferencia de la pose del robot, la
-    cobertura no se corrige sola después.
-    """
+    """Construye cobertura a partir de rayos válidos, sin ver a través de paredes."""
 
     def __init__(self):
         super().__init__('grilla_cobertura')
@@ -90,6 +68,7 @@ class GrillaCobertura(Node):
         self.aviso_tf_mostrado = False
         self.pose_inicial_confirmada = False
         self.ultimo_scan = None
+        self.movimiento_invalido = False
 
         qos_mapa = QoSProfile(
             depth=1,
@@ -101,6 +80,7 @@ class GrillaCobertura(Node):
         self.create_subscription(LaserScan, 'scan', self.recibir_scan, qos_profile_sensor_data)
         self.create_subscription(
             PoseWithCovarianceStamped, 'initialpose', self.recibir_pose_inicial, 10)
+        self.create_subscription(String, 'estado', self.recibir_estado, 10)
         self.pub_grilla = self.create_publisher(OccupancyGrid, 'grilla_cobertura', qos_mapa)
         self.timer = self.create_timer(1.0 / FRECUENCIA_HZ, self.marcar_cobertura)
 
@@ -108,6 +88,10 @@ class GrillaCobertura(Node):
 
     def recibir_mapa(self, msg: OccupancyGrid):
         alto, ancho = msg.info.height, msg.info.width
+        if (alto <= 0 or ancho <= 0 or len(msg.data) != alto * ancho
+                or not math.isfinite(msg.info.resolution) or msg.info.resolution <= 0):
+            self.get_logger().error('Mapa inválido para construir cobertura.')
+            return
         datos = np.array(msg.data, dtype=np.int16).reshape((alto, ancho))
         libre_fino = (datos == 0)
 
@@ -153,6 +137,18 @@ class GrillaCobertura(Node):
 
     # ---------- callbacks ----------
 
+    def recibir_estado(self, msg):
+        """Invalida cobertura dudosa si la estimación avanza con el robot trabado."""
+        bloqueado = msg.data == 'bloqueado_deslizamiento'
+        if bloqueado and not self.movimiento_invalido:
+            self.pose_inicial_confirmada = False
+            if self.cubierta is not None:
+                self.cubierta[:] = False
+                self.publicar_grilla()
+            self.get_logger().warn(
+                'Cobertura invalidada por deslizamiento; confirmar de nuevo la pose.')
+        self.movimiento_invalido = bloqueado
+
     def recibir_pose_inicial(self, msg):
         # Si ya se había confirmado antes (el humano corrigió la pose a
         # mitad de recorrido), la cobertura marcada hasta ahora quedó
@@ -186,7 +182,7 @@ class GrillaCobertura(Node):
     def marcar_cobertura(self):
         """Marca visibilidad sobre el mapa fino sin atravesar obstáculos."""
         msg = self.ultimo_scan
-        if (not self.pose_inicial_confirmada or self.cubierta is None
+        if (self.movimiento_invalido or not self.pose_inicial_confirmada or self.cubierta is None
                 or msg is None or msg is self.scan_procesado):
             return
         ahora = self.get_clock().now()
@@ -234,11 +230,17 @@ class GrillaCobertura(Node):
             angulo = yaw + msg.angle_min + i * msg.angle_increment
             fin = celda_fina(tx + alcance * math.cos(angulo),
                              ty + alcance * math.sin(angulo))
+            anterior = None
             for fila, col in trazar_rayo(*inicio, *fin):
                 if not (0 <= fila < alto and 0 <= col < ancho):
                     break
+                if (anterior is not None and fila != anterior[0] and col != anterior[1]
+                        and (not self.libre_fino[fila, anterior[1]]
+                             or not self.libre_fino[anterior[0], col])):
+                    break
                 if not self.libre_fino[fila, col]:
                     break
+                anterior = (fila, col)
                 fc, cc = fila // self.factor_escala, col // self.factor_escala
                 if self.libre_c[fc, cc] and not self.cubierta[fc, cc]:
                     self.cubierta[fc, cc] = True

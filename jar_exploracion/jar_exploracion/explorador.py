@@ -1,5 +1,7 @@
 import math
 import time
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import scipy.ndimage as nd
@@ -15,17 +17,17 @@ from rclpy.time import Time
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, Quaternion, PoseStamped, PoseWithCovarianceStamped
-from std_msgs.msg import String
+from std_msgs.msg import Float32, String
 from visualization_msgs.msg import Marker
 
 from tf2_ros import Buffer, TransformListener
 
-from jar_exploracion.planificador import a_estrella, segmento_transitable
+from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
 from jar_exploracion.trazado import trazar_rayo
 from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
+from jar_exploracion.seguridad import espacio_transitable, puntos_scan, regular_traslacion
 
 FRECUENCIA_HZ = 10.0
-REPLANIFICAR_CADA_N_TICKS = int(FRECUENCIA_HZ * 2)  # cada ~2s, aunque el objetivo no haya cambiado
 
 ESTADO_INICIALIZANDO = 'inicializando'
 ESTADO_EXPLORANDO = 'explorando'
@@ -40,51 +42,11 @@ def yaw_de_quaternion(q: Quaternion) -> float:
 
 class Explorador(Node):
     """
-    Máquina de estados de 3 estados que gobierna la misión completa:
+    Explora con objetivos persistentes, A* y traslación validada con huella rectangular.
 
-        INICIALIZANDO -> EXPLORANDO -> TERMINADO
-
-    - **INICIALIZANDO**: espera a que un humano confirme la pose inicial
-      con "2D Pose Estimate" en RViz (el robot real no arranca sabiendo
-      dónde está) y a que el filtro de partículas tenga un rato para
-      asentarse con el robot quieto antes de arrancar a moverse —
-      moverse mientras la pose todavía no convergió compone el error.
-    - **EXPLORANDO**: sigue el camino hasta la celda libre no cubierta más
-      cercana. Transición a TERMINADO cuando no queda ninguna (volver a
-      la base, o a cualquier otro punto, queda como desafío extra — ver
-      el README).
-    - **TERMINADO**: se queda quieto.
-
-    Dentro de EXPLORANDO, el movimiento en sí **no** es
-    reactivo puro: en vez de ir directo al objetivo sumando un vector
-    atractivo y uno repulsivo (lo que en un pasillo angosto puede quedar
-    oscilando en el lugar — el mínimo local clásico de un controlador
-    puramente reactivo), primero se **planifica** con A* el camino óptimo
-    (semana 08 depende de tener `a_estrella()` completa en
-    `planificador.py`), y después se lo sigue waypoint a waypoint. El
-    vector repulsivo del /scan queda como capa de seguridad secundaria
-    (obstáculos que el mapa estático no conoce), no como mecanismo
-    principal de esquive.
-
-    A* corre sobre el `/map` original (resolución fina), no sobre la
-    grilla de cobertura: esa grilla agrupa varias celdas del mapa en una
-    sola a resolución más gruesa para que cubrir el área entera sea
-    alcanzable, y una pared delgada puede ocupar menos de la mitad de un
-    bloque agrupado — quedaría marcada "libre" y A* la atravesaría sin
-    darse cuenta. La grilla de cobertura solo se usa para decidir **qué
-    zona** visitar (la celda libre no cubierta más cercana); una vez
-    elegida esa zona, el camino hasta ahí se planifica contra el mapa de
-    verdad.
-
-    Contra ese mapa fino se aplican además dos capas, mismo mecanismo que
-    un costmap inflado (tipo Nav2, o el que arma el TP Final con
-    `distance_transform_edt` + campana de Gauss sobre `/likelihood_map`,
-    ya resueltas acá): un **filtro duro** descarta cualquier celda a menos
-    de `radio_robot + margen_seguridad` de una pared (así A* nunca elige
-    un pasillo más angosto que el propio chasis), y un **costo suave** que
-    decae con la distancia a la pared hace que, entre las celdas que sí
-    pasan el filtro, A* prefiera las más alejadas cuando hay margen para
-    elegir.
+    La huella conserva la orientación estimada actual; los cambios de orientación
+    invalidan el camino. No se ordenan rotaciones ni se supone que el robot pueda
+    girar dentro de un estrechamiento. La cobertura la confirma el scan real.
     """
 
     def __init__(self):
@@ -94,39 +56,62 @@ class Explorador(Node):
         self.declare_parameter('base_frame', 'base_footprint')
         self.declare_parameter('velocidad_maxima', 0.3)
         self.declare_parameter('ganancia_atractiva', 0.6)
-        self.declare_parameter('ganancia_repulsiva', 0.15)
-        self.declare_parameter('radio_repulsion', 0.4)
         self.declare_parameter('suavizado', 0.3)
         self.declare_parameter('tiempo_asentamiento_s', 3.0)
-        # Donatello mide 0.30 x 0.20 m (rosmaster_x3_base.urdf.xacro); el
-        # radio circunscripto (mitad de la diagonal) es ~0.18 m -- usamos
-        # ese valor para no ligar una esquina del chasis contra la pared
-        # sin importar la orientación con la que pase (es holonómico).
-        self.declare_parameter('radio_robot', 0.18)
+        # Las dimensiones incluyen ruedas y el desplazamiento del chasis respecto de la base.
         self.declare_parameter('margen_seguridad', 0.05)
         self.declare_parameter('sigma_costo', 0.15)
         self.declare_parameter('timeout_scan_s', 0.5)
         self.declare_parameter('reintento_objetivo_s', 10.0)
         self.declare_parameter('timeout_sin_avance_s', 15.0)
         self.declare_parameter('verificar_movimiento_simulado', False)
+        self.declare_parameter('largo_robot', 0.37)
+        self.declare_parameter('ancho_robot', 0.24)
+        self.declare_parameter('timeout_pose_s', 0.5)
+        self.declare_parameter('velocidad_pasillo', 0.10)
+        self.declare_parameter('horizonte_colision_s', 0.8)
+        self.declare_parameter('desaceleracion_segura', 0.4)
+        self.declare_parameter('subdivisiones_mapa', 2)
+        self.declare_parameter('porcentaje_objetivo', 98.0)
 
+        self.largo_robot = self.get_parameter('largo_robot').value
+        self.ancho_robot = self.get_parameter('ancho_robot').value
+        self.timeout_pose_s = self.get_parameter('timeout_pose_s').value
+        self.velocidad_pasillo = self.get_parameter('velocidad_pasillo').value
+        self.horizonte_colision_s = self.get_parameter('horizonte_colision_s').value
+        self.desaceleracion_segura = self.get_parameter('desaceleracion_segura').value
+        self.subdivisiones_mapa = self.get_parameter('subdivisiones_mapa').value
+        self.porcentaje_objetivo = self.get_parameter('porcentaje_objetivo').value
+        if not math.isfinite(self.porcentaje_objetivo) or not 0 < self.porcentaje_objetivo <= 100:
+            raise ValueError('porcentaje_objetivo debe ser mayor que 0 y como máximo 100')
+        self.total_celdas_libres = 0
+        self.celdas_cubiertas = 0
+        if self.subdivisiones_mapa not in (1, 2, 3, 4):
+            raise ValueError('subdivisiones_mapa debe estar entre 1 y 4')
+        self.yaw_huella = 0.0
         self.map_frame = self.get_parameter('map_frame').value
         self.base_frame = self.get_parameter('base_frame').value
         self.velocidad_maxima = self.get_parameter('velocidad_maxima').value
         self.ganancia_atractiva = self.get_parameter('ganancia_atractiva').value
-        self.ganancia_repulsiva = self.get_parameter('ganancia_repulsiva').value
-        self.radio_repulsion = self.get_parameter('radio_repulsion').value
         # Peso del comando nuevo contra el anterior (media móvil exponencial),
         # para que el resultado de seguir el camino no salte bruscamente de
         # un waypoint a otro.
         self.suavizado = self.get_parameter('suavizado').value
         self.tiempo_asentamiento_s = self.get_parameter('tiempo_asentamiento_s').value
-        self.radio_robot = self.get_parameter('radio_robot').value
         self.margen_seguridad = self.get_parameter('margen_seguridad').value
         self.sigma_costo = self.get_parameter('sigma_costo').value
         self.timeout_scan_s = self.get_parameter('timeout_scan_s').value
         self.reintento_objetivo_s = self.get_parameter('reintento_objetivo_s').value
         self.timeout_sin_avance_s = self.get_parameter('timeout_sin_avance_s').value
+        positivos = (self.largo_robot, self.ancho_robot, self.timeout_pose_s,
+                     self.velocidad_maxima, self.ganancia_atractiva,
+                     self.sigma_costo, self.timeout_sin_avance_s,
+                     self.velocidad_pasillo, self.horizonte_colision_s,
+                     self.desaceleracion_segura)
+        if not all(math.isfinite(v) and v > 0 for v in positivos):
+            raise ValueError('Dimensiones, velocidades, ganancias y tiempos deben ser positivos')
+        if not math.isfinite(self.margen_seguridad) or self.margen_seguridad < 0:
+            raise ValueError('margen_seguridad debe ser finito y no negativo')
         if self.timeout_sin_avance_s <= 0:
             raise ValueError('timeout_sin_avance_s debe ser positivo')
         self.seguimiento_avance = None
@@ -147,6 +132,8 @@ class Explorador(Node):
         self.libre_fino = None      # bool[alto, ancho], resolución del /map: transitable, para A*
         self.costo_fino = None      # float[alto, ancho]: costo extra por cercanía a una pared
         self.info_mapa = None       # MapMetaData del /map (resolución fina)
+        self.info_mapa_fuente = None
+        self.datos_mapa_fuente = None
         self.no_cubiertas = None    # bool[alto, ancho], resolución de grilla_cobertura
         self.info_grilla = None     # MapMetaData de grilla_cobertura (resolución gruesa)
         self.ultimo_scan = None
@@ -166,7 +153,9 @@ class Explorador(Node):
         self.objetivo_celda = None  # (fila, col) al que corresponde self.camino
         self.objetivo_mision = None  # Se conserva hasta cubrir, rechazar o suspender la zona.
         self.camino = None          # lista de (fila, col), en orden, sin recorrer
-        self.ticks_desde_replan = REPLANIFICAR_CADA_N_TICKS  # fuerza plan en el primer tick
+        self.futuro_plan = None
+        self.clave_plan = None
+        self.cache_planificador = None
 
         qos_grilla = QoSProfile(
             depth=1,
@@ -185,18 +174,37 @@ class Explorador(Node):
         self.pub_objetivo = self.create_publisher(Marker, 'objetivo_actual', 10)
         self.pub_camino = self.create_publisher(Path, 'camino_planificado', 10)
         self.pub_estado = self.create_publisher(String, 'estado', 10)
+        self.pub_porcentaje = self.create_publisher(Float32, 'porcentaje_cobertura', 10)
         if self.get_parameter('verificar_movimiento_simulado').value:
             self.create_subscription(
                 Odometry, '/ground_truth/odom', self.verificar_movimiento,
                 qos_profile_sensor_data)
 
+        self.ejecutor_plan = ThreadPoolExecutor(max_workers=1, thread_name_prefix='planificador')
         self.timer = self.create_timer(1.0 / FRECUENCIA_HZ, self.controlar)
 
     # ---------- callbacks ----------
 
     def recibir_mapa(self, msg: OccupancyGrid):
         alto, ancho = msg.info.height, msg.info.width
+        if (msg.header.frame_id != self.map_frame or alto <= 0 or ancho <= 0
+                or not math.isfinite(msg.info.resolution) or msg.info.resolution <= 0
+                or len(msg.data) != alto * ancho):
+            self.get_logger().error('Mapa inválido o publicado en un frame inesperado.')
+            return
         datos = np.array(msg.data, dtype=np.int16).reshape((alto, ancho))
+        if (self.info_mapa_fuente == msg.info
+                and np.array_equal(self.datos_mapa_fuente, datos)):
+            return
+        self.info_mapa_fuente = deepcopy(msg.info)
+        self.datos_mapa_fuente = datos.copy()
+        info = deepcopy(msg.info)
+        factor = self.subdivisiones_mapa
+        if factor > 1:
+            datos = np.repeat(np.repeat(datos, factor, axis=0), factor, axis=1)
+            info.resolution /= factor
+            info.width *= factor
+            info.height *= factor
         self.objetivo_mision = None
         self.zonas_sin_destino.clear()
         self.puntos_observacion.clear()
@@ -209,16 +217,15 @@ class Explorador(Node):
         ocupado = datos != 0  # pared o desconocido: no confiar
 
         # Distancia real (en metros) de cada celda a la pared más cercana.
-        dist_a_pared = nd.distance_transform_edt(~ocupado) * msg.info.resolution
+        dist_a_pared = nd.distance_transform_edt(~ocupado) * info.resolution
         self.distancia_a_pared = dist_a_pared
         self.datos_mapa = datos
 
-        # Filtro duro: ninguna celda a menos de radio_robot + margen de una
-        # pared es "libre" para A* -- sin esto, A* podría mandar a
-        # Donatello por un pasillo más angosto que su propio chasis sin
-        # saber que no entra (ver README de esta semana).
-        radio_total = self.radio_robot + self.margen_seguridad
-        self.libre_fino = (datos == 0) & (dist_a_pared >= radio_total)
+        # Huella rectangular, margen y tamaño de píxel para la orientación actual.
+        self.libre_fino = espacio_transitable(
+            datos, info.resolution, self.largo_robot, self.ancho_robot,
+            self.margen_seguridad + 0.006,
+            self.yaw_huella - yaw_de_quaternion(msg.info.origin.orientation))
         self.componentes_libres, _ = nd.label(self.libre_fino)
 
         # Costo suave por encima del filtro duro: entre las celdas que sí
@@ -227,10 +234,39 @@ class Explorador(Node):
         # distancia a la pared) que un costmap inflado tipo Nav2.
         self.costo_fino = 100.0 * np.exp(-(dist_a_pared ** 2) / (2.0 * self.sigma_costo ** 2))
 
-        self.info_mapa = msg.info
+        self.info_mapa = info
+        self.camino = None
+        self.objetivo_celda = None
+        self.seguimiento_avance = None
+        self.publicar_camino([])
+        self.detener()
+
+    def actualizar_orientacion_huella(self, yaw):
+        """Recalcula el espacio libre si cambia significativamente la orientación."""
+        diferencia = math.atan2(math.sin(yaw - self.yaw_huella), math.cos(yaw - self.yaw_huella))
+        if abs(diferencia) < 0.03:
+            return
+        self.yaw_huella = yaw
+        self.libre_fino = espacio_transitable(
+            self.datos_mapa, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
+            self.margen_seguridad + 0.006,
+            yaw - yaw_de_quaternion(self.info_mapa.origin.orientation))
+        self.componentes_libres, _ = nd.label(self.libre_fino)
+        for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
+                      self.cursores_observacion, self.puntos_observacion):
+            cache.clear()
+        self.zonas_sin_destino.clear()
+        self.camino = None
+        self.publicar_camino([], conservar_objetivo=True)
+        self.detener()
 
     def recibir_grilla(self, msg: OccupancyGrid):
         alto, ancho = msg.info.height, msg.info.width
+        if (msg.header.frame_id != self.map_frame or alto <= 0 or ancho <= 0
+                or not math.isfinite(msg.info.resolution) or msg.info.resolution <= 0
+                or len(msg.data) != alto * ancho):
+            self.get_logger().error('Grilla de cobertura inválida o en un frame inesperado.')
+            return
         datos = np.array(msg.data, dtype=np.int16).reshape((alto, ancho))
         if self.info_grilla != msg.info:
             self.objetivo_mision = None
@@ -243,6 +279,14 @@ class Explorador(Node):
             self.rondas_observacion.clear()
             self.cache_zonas_alcanzables.clear()
         self.no_cubiertas = (datos == 100)
+        self.celdas_cubiertas = int(np.count_nonzero(datos == 0))
+        self.total_celdas_libres = self.celdas_cubiertas + int(np.count_nonzero(self.no_cubiertas))
+        porcentaje = self.porcentaje_cobertura()
+        if porcentaje is not None:
+            self.pub_porcentaje.publish(Float32(data=porcentaje))
+            self.get_logger().info(
+                f'Cobertura: {porcentaje:.1f}% / objetivo {self.porcentaje_objetivo:.1f}%.',
+                throttle_duration_sec=10.0)
         self.info_grilla = msg.info
         if self.objetivo_celda is not None:
             f, c = self.objetivo_celda
@@ -263,9 +307,20 @@ class Explorador(Node):
         # confirmado antes): si el humano corrige la pose a mitad de
         # recorrido, el robot debe volver a quedarse quieto un momento
         # para que el filtro converja de nuevo antes de seguir moviéndose.
+        if msg.header.frame_id and msg.header.frame_id != self.map_frame:
+            self.get_logger().warn('Pose inicial ignorada: debe estar en el frame del mapa.')
+            return
+        self.detener()
+        self.camino = None
+        self.objetivo_celda = None
+        self.publicar_camino([])
         self.objetivos_pendientes.clear()
         self.objetivo_mision = None
         self.detector_deslizamiento.reiniciar()
+        if self.futuro_plan is not None:
+            self.futuro_plan.cancel()
+        self.futuro_plan = None
+        self.clave_plan = None
         self.seguimiento_avance = None
         self.zonas_sin_destino.clear()
         self.puntos_observacion.clear()
@@ -312,9 +367,15 @@ class Explorador(Node):
             tf = self.tf_buffer.lookup_transform(self.map_frame, self.base_frame, Time())
         except Exception:
             return None
+        if tf.header.stamp.sec or tf.header.stamp.nanosec:
+            edad = (self.get_clock().now() - Time.from_msg(tf.header.stamp)).nanoseconds / 1e9
+            if edad > self.timeout_pose_s or edad < -0.1:
+                return None
         x = tf.transform.translation.x
         y = tf.transform.translation.y
         yaw = yaw_de_quaternion(tf.transform.rotation)
+        if not all(math.isfinite(v) for v in (x, y, yaw)):
+            return None
         return x, y, yaw
 
     def celda_a_mundo(self, fila: int, col: int, info):
@@ -341,29 +402,7 @@ class Explorador(Node):
         return fila, col
 
     def celda_no_cubierta_mas_cercana(self, fila_r: int, col_r: int, preferidas=None):
-        """
-        TODO: de todas las celdas de `self.no_cubiertas` que son `True`
-        (libres y todavía no vistas), devolver la más cercana a
-        `(fila_r, col_r)` -- la celda donde está el robot ahora, en la
-        grilla de cobertura.
-
-        Devolvé una tupla `(fila, col)`, o `None` si no queda ninguna
-        celda no cubierta (cobertura completa).
-
-        Pasos sugeridos:
-          1. `np.where(self.no_cubiertas)` te da dos arrays paralelos,
-             `filas` y `cols`, con los índices de todas las celdas
-             `True`.
-          2. Si `len(filas) == 0`, no queda nada por cubrir: devolvé
-             `None`.
-          3. Calculá la distancia (al cuadrado, no hace falta la raíz
-             para comparar) de cada candidata a `(fila_r, col_r)`:
-             `dist2 = (filas - fila_r)**2 + (cols - col_r)**2` --
-             vectorizado, una cuenta para las N celdas a la vez.
-          4. `np.argmin(dist2)` te da el índice, dentro de `filas`/`cols`,
-             de la candidata más cercana.
-          5. Devolvé `(int(filas[i]), int(cols[i]))` con ese índice.
-        """
+        """Conserva un objetivo válido y prioriza nuevas zonas alcanzables."""
         candidatas = self.no_cubiertas.copy()
         for celda in self.zonas_sin_destino:
             if (0 <= celda[0] < candidatas.shape[0]
@@ -410,43 +449,7 @@ class Explorador(Node):
         return self.objetivo_mision
 
     def vector_hacia(self, x_r, y_r, yaw_r, punto_mundo, distancia_restante=None):
-        """
-        TODO: vector que apunta desde la pose del robot hacia
-        `punto_mundo` (una tupla `(x, y)` en `map`), expresado en el
-        **frame del robot** -- porque Donatello es holonómico (mecanum,
-        ver semana 02): puede moverse en diagonal sin girar el chasis
-        primero, así que el controlador manda `linear.x`/`linear.y`
-        directo en vez de "girar hasta apuntar, avanzar" como una base
-        diferencial. Para eso, el vector "hacia dónde ir" tiene que estar
-        expresado relativo a hacia dónde mira el robot ahora, no en
-        coordenadas de `map`.
-
-        Devolvé una tupla `(vx, vy, dist)`: la componente x e y del
-        vector en el frame del robot, y la distancia en línea recta hasta
-        `punto_mundo` (esto último ya lo necesitás calcular en el camino,
-        y lo usa quien te llama para saber si ya llegaste).
-
-        Pasos sugeridos:
-          1. Separá `punto_mundo` en `gx, gy`.
-          2. Calculá el vector en `map`: `dx, dy = gx - x_r, gy - y_r`.
-          3. Calculá `dist = math.hypot(dx, dy)`. Si es menor a `1e-3`
-             (prácticamente en el punto), devolvé `(0.0, 0.0, dist)`
-             directo -- dividir por una distancia ~0 en el paso siguiente
-             rompería todo.
-          4. Frenar a medida que se acerca, en vez de mantener velocidad
-             constante hasta pegar contra el punto y frenar en seco:
-             `escala = min(dist, 1.0) * self.ganancia_atractiva`, y de ahí
-             `dir_x_mundo, dir_y_mundo = (dx / dist) * escala, (dy / dist) * escala`.
-          5. Rotá ese vector de `map` al frame del robot usando `yaw_r`
-             (mismo tipo de rotación que ya usaste transformando puntos
-             del scan a `map` en semanas anteriores, pero en sentido
-             inverso -- acá es de `map` al frame del robot):
-               `c, s = math.cos(yaw_r), math.sin(yaw_r)`
-               `vx = c * dir_x_mundo + s * dir_y_mundo`
-               `vy = -s * dir_x_mundo + c * dir_y_mundo`
-          6. Devolvé `(vx, vy, dist)`.
-        """
-
+        """Orienta la traslación al waypoint y frena según el recorrido restante."""
         # 1. Coordenadas del objetivo
         gx, gy = punto_mundo
 
@@ -497,50 +500,18 @@ class Explorador(Node):
                 return False
         return True
 
-    def vector_repulsivo(self):
-        """Capa de seguridad secundaria: empuja lejos de cualquier punto
-        del /scan más cerca que radio_repulsion. El camino de A* ya evita
-        las paredes que conoce la grilla; esto cubre lo que la grilla no
-        sabe (resolución gruesa, obstáculos dinámicos)."""
+    def impactos_en_base(self):
+        """Obtiene impactos contemporáneos para comprobar la huella y su barrido."""
         if not self.scan_vigente():
             return None
-
         try:
-            tf = self.tf_buffer.lookup_transform(
-                self.base_frame, self.ultimo_scan.header.frame_id, Time())
+            tf = self.tf_buffer.lookup_transform_full(
+                self.base_frame, Time(), self.ultimo_scan.header.frame_id,
+                Time.from_msg(self.ultimo_scan.header.stamp), self.map_frame)
         except Exception:
             return None
-
-        msg = self.ultimo_scan
-        rangos = np.array(msg.ranges)
-        n = len(rangos)
-        angulos = msg.angle_min + np.arange(n) * msg.angle_increment
-        validos = (np.isfinite(rangos) & (rangos > 0.0)
-                   & (rangos >= msg.range_min) & (rangos <= msg.range_max))
-        if not np.any(validos):
-            return 0.0, 0.0
-
-        r = rangos[validos]
-        a = angulos[validos]
-        xs_laser = r * np.cos(a)
-        ys_laser = r * np.sin(a)
-
-        tx, ty = tf.transform.translation.x, tf.transform.translation.y
-        tyaw = yaw_de_quaternion(tf.transform.rotation)
-        c, s = math.cos(tyaw), math.sin(tyaw)
-        xs_base = tx + c * xs_laser - s * ys_laser
-        ys_base = ty + s * xs_laser + c * ys_laser
-
-        dist = np.maximum(np.hypot(xs_base, ys_base), 1e-6)
-        cerca = dist < self.radio_repulsion
-        if not np.any(cerca):
-            return 0.0, 0.0
-
-        magnitud = (1.0 / dist[cerca] - 1.0 / self.radio_repulsion)
-        rx = -magnitud * (xs_base[cerca] / dist[cerca])
-        ry = -magnitud * (ys_base[cerca] / dist[cerca])
-        return (float(np.sum(rx)) * self.ganancia_repulsiva,
-                float(np.sum(ry)) * self.ganancia_repulsiva)
+        return puntos_scan(self.ultimo_scan, tf.transform.translation.x,
+                           tf.transform.translation.y, yaw_de_quaternion(tf.transform.rotation))
 
     # ---------- planificación ----------
 
@@ -569,13 +540,20 @@ class Explorador(Node):
         self.cache_zonas_alcanzables[componente] = mascara
         return mascara
 
-    def objetivo_sin_avance(self, objetivo, x, y):
-        """Detecta un objetivo sin desplazamiento de al menos cinco centímetros."""
+    def objetivo_sin_avance(self, objetivo, x, y, distancia_restante=None):
+        """Exige progreso hacia el destino; oscilar en el sitio no cuenta como avance."""
         ahora = self.get_clock().now().nanoseconds / 1e9
         anterior = self.seguimiento_avance
-        if (anterior is None or anterior[0] != objetivo
-                or math.hypot(x - anterior[1], y - anterior[2]) >= 0.05):
-            self.seguimiento_avance = (objetivo, x, y, ahora)
+        mejora = False
+        if anterior is not None:
+            if distancia_restante is None:
+                mejora = math.hypot(x - anterior[1], y - anterior[2]) >= 0.05
+            elif anterior[4] is None:
+                mejora = True
+            else:
+                mejora = distancia_restante < anterior[4] - 0.03
+        if anterior is None or anterior[0] != objetivo or mejora:
+            self.seguimiento_avance = (objetivo, x, y, ahora, distancia_restante)
             return False
         return ahora - anterior[3] >= self.timeout_sin_avance_s
 
@@ -607,11 +585,11 @@ class Explorador(Node):
             return f'{posicion}: fuera del mapa'
         valor = self.datos_mapa[celda]
         distancia = self.distancia_a_pared[celda]
-        minimo = self.radio_robot + self.margen_seguridad
         if valor != 0:
             motivo = f'celda ocupada o desconocida (valor={valor})'
         elif not self.libre_fino[celda]:
-            motivo = f'bloqueada por margen: distancia={distancia:.2f} m < {minimo:.2f} m'
+            motivo = ('bloqueada por huella rectangular y margen; '
+                      f'distancia al muro={distancia:.2f} m')
         else:
             motivo = f'transitable, distancia a obstáculos/desconocido={distancia:.2f} m'
         return f'{posicion}, celda={celda}: {motivo}'
@@ -711,24 +689,22 @@ class Explorador(Node):
         self.rondas_observacion[zona] = self.rondas_observacion.get(zona, 0) + 1
         return True
 
+    def calcular_camino(self, libres, costos, inicio, objetivo):
+        """Ejecuta solo cálculo numérico fuera del executor ROS y reutiliza el grafo."""
+        clave = (id(libres), id(costos))
+        if self.cache_planificador is None or self.cache_planificador[0] != clave:
+            self.cache_planificador = (clave, PlanificadorCompilado(libres, costos))
+        return self.cache_planificador[1].buscar(inicio, objetivo)
+
     def replanificar_si_hace_falta(self, objetivo_grueso, objetivo_mundo, x_r, y_r):
-        """Planifica con A* sobre la grilla fina del /map -- objetivo_grueso
-        es la celda de la grilla de cobertura, solo se usa para decidir
-        *cuándo* replanificar (cambió la zona elegida); el camino en sí se
-        calcula entre las celdas finas del robot y del objetivo."""
+        """Calcula rutas fuera del executor ROS y conserva un camino válido."""
         cambio_de_objetivo = objetivo_grueso != self.objetivo_celda
         if cambio_de_objetivo:
             self.get_logger().info(
                 f'Nuevo objetivo de cobertura: {objetivo_grueso}; '
                 f'destino ({objetivo_mundo[0]:.2f}, {objetivo_mundo[1]:.2f}) m.')
-        self.ticks_desde_replan += 1
-        toca_por_tiempo = self.ticks_desde_replan >= REPLANIFICAR_CADA_N_TICKS
-        sin_camino = not self.camino
-
-        if not (cambio_de_objetivo or toca_por_tiempo or sin_camino):
+        if not cambio_de_objetivo and self.camino:
             return
-
-        self.ticks_desde_replan = 0
         self.objetivo_celda = objetivo_grueso
         celda_robot = self.celda_fina_segura(x_r, y_r)
         celda_objetivo = self.celda_fina_segura(*objetivo_mundo)
@@ -740,10 +716,33 @@ class Explorador(Node):
             self.camino = None
             self.publicar_camino([])
             return
-        camino = None
-        if celda_objetivo is not None and self.libre_fino[celda_objetivo]:
-            camino = a_estrella(
-                self.libre_fino, celda_robot, celda_objetivo, self.costo_fino)
+        clave = (objetivo_grueso, celda_objetivo, id(self.libre_fino))
+        if self.futuro_plan is None or self.clave_plan != clave:
+            if self.futuro_plan is not None:
+                self.futuro_plan.cancel()
+            self.detener()
+            self.futuro_plan = self.ejecutor_plan.submit(
+                self.calcular_camino, self.libre_fino, self.costo_fino,
+                celda_robot, celda_objetivo)
+            self.clave_plan = clave
+        if not self.futuro_plan.done():
+            self.camino = None
+            self.detener()
+            self.publicar_camino([], conservar_objetivo=True)
+            self.get_logger().info('Calculando camino; robot detenido.', throttle_duration_sec=5.0)
+            return
+        try:
+            camino = self.futuro_plan.result()
+        except Exception as error:
+            self.get_logger().error(f'Falló el cálculo del camino: {error}')
+            camino = None
+        self.futuro_plan = None
+        if camino and not segmento_transitable(self.libre_fino, celda_robot, camino[0]):
+            # La localización cambió mientras se calculaba: no seguir un inicio desactualizado.
+            self.camino = None
+            self.detener()
+            self.publicar_camino([], conservar_objetivo=True)
+            return
         if camino is None:
             motivo = self.describir_celda(objetivo_mundo, celda_objetivo)
             if celda_objetivo is not None and self.libre_fino[celda_objetivo]:
@@ -762,10 +761,7 @@ class Explorador(Node):
         self.publicar_camino(camino)
 
     def siguiente_punto_del_camino(self, x_r, y_r):
-        """Descarta del camino los waypoints ya alcanzados y devuelve el
-        primero que falta, en coordenadas de `map`. El camino está en
-        celdas finas, así que la tolerancia es varias celdas (si fuera una
-        sola, el seguimiento sería demasiado fino/lento de recorrer)."""
+        """Avanza por waypoints sin tomar atajos que corten esquinas."""
         if not self.camino:
             return None
         tolerancia = max(self.info_mapa.resolution * 3.0, 0.1)
@@ -777,6 +773,10 @@ class Explorador(Node):
                 self.camino.pop(0)
             else:
                 break
+        if not segmento_transitable(self.libre_fino, celda_robot, self.camino[0]):
+            self.camino = None
+            self.publicar_camino([], conservar_objetivo=True)
+            return None
         return self.celda_a_mundo(*self.camino[0], self.info_mapa)
 
     # ---------- visualización ----------
@@ -798,8 +798,8 @@ class Explorador(Node):
         marcador.color.a = 1.0
         self.pub_objetivo.publish(marcador)
 
-    def publicar_camino(self, camino):
-        if not camino:
+    def publicar_camino(self, camino, conservar_objetivo=False):
+        if not camino and not conservar_objetivo:
             marcador = Marker()
             marcador.header.frame_id = self.map_frame
             marcador.ns = 'objetivo_actual'
@@ -821,37 +821,18 @@ class Explorador(Node):
 
     # ---------- máquina de estados ----------
 
+    def porcentaje_cobertura(self):
+        """Cuenta solo celdas libres; paredes y desconocidos no forman el denominador."""
+        if self.total_celdas_libres == 0:
+            return None
+        return 100.0 * self.celdas_cubiertas / self.total_celdas_libres
+
     def transicionar(self, pose):
-        """
-        TODO: mismo criterio que la máquina de estados de semana 03 --
-        primero se decide la transición (esta función), después se actúa
-        según el estado ya actualizado (`actuar()`, ya resuelta).
-
-        Completá los 2 `if` de más abajo, uno por estado (el bloque
-        `if self.estado != anterior: ...` del final, que loguea cada
-        transición, ya está resuelto -- no lo toques).
-
-          - **Si `self.estado == ESTADO_INICIALIZANDO`**: pasar a
-            `ESTADO_EXPLORANDO` solo cuando se cumplen TODAS estas
-            condiciones a la vez:
-              a. `pose is not None` (hay tf).
-              b. `self.no_cubiertas is not None` (ya llegó
-                 `/grilla_cobertura`).
-              c. `self.libre_fino is not None` (ya llegó `/map`).
-              d. `self.pose_inicial_confirmada` es `True` (un humano ya
-                 clickeó "2D Pose Estimate").
-              e. Además, pasó al menos `self.tiempo_asentamiento_s`
-                 segundos desde esa confirmación -- calculalo con
-                 `(self.get_clock().now() - self.momento_confirmacion).nanoseconds / 1e9`.
-            Si se cumplen las 5, cambiá `self.estado` a
-            `ESTADO_EXPLORANDO`.
-          - **Si `self.estado == ESTADO_EXPLORANDO`**: pasar a
-            `ESTADO_TERMINADO` cuando no queda ninguna celda no cubierta
-            -- `self.no_cubiertas is not None and not np.any(self.no_cubiertas)`.
-        """
+        """Actualiza la misión sin confundir cobertura completa con falta de destinos."""
         anterior = self.estado
         if self.estado == ESTADO_SIN_DESTINOS:
-            if self.no_cubiertas is not None and not np.any(self.no_cubiertas):
+            if (self.no_cubiertas is not None and self.total_celdas_libres > 0
+                    and not np.any(self.no_cubiertas)):
                 self.estado = ESTADO_TERMINADO
             elif self.no_cubiertas is not None and any(
                     (int(f), int(c)) not in self.zonas_sin_destino
@@ -876,6 +857,7 @@ class Explorador(Node):
 
             if (
                 self.no_cubiertas is not None
+                and self.total_celdas_libres > 0
                 and not np.any(self.no_cubiertas)
             ):
                 self.estado = ESTADO_TERMINADO
@@ -888,20 +870,24 @@ class Explorador(Node):
                     'ni puntos de observación seguros. No es cobertura completa. '
                     'Se reconsiderarán si cambia el mapa o la grilla.')
 
+        if self.estado in (ESTADO_EXPLORANDO, ESTADO_SIN_DESTINOS):
+            porcentaje = self.porcentaje_cobertura()
+            if porcentaje is not None and porcentaje + 1e-9 >= self.porcentaje_objetivo:
+                self.estado = ESTADO_TERMINADO
+                self.get_logger().info(
+                    f'Objetivo de cobertura alcanzado: {porcentaje:.1f}% '
+                    f'>= {self.porcentaje_objetivo:.1f}%.')
         if self.estado != anterior:
             self.get_logger().info(
                 f'Transición: {anterior} -> {self.estado}'
             )
 
     def objetivo_de_la_mision(self, fila_r, col_r, preferidas=None):
-        """Celda (gruesa, de la grilla de cobertura) libre no cubierta más
-        cercana al robot -- solo se llama en EXPLORANDO, así que siempre
-        hay al menos una (si no, transicionar() ya pasó a TERMINADO)."""
+        """Elige o conserva una zona pendiente de cobertura."""
         return self.celda_no_cubierta_mas_cercana(fila_r, col_r, preferidas)
 
     def actuar(self, pose):
-        """Movimiento en EXPLORANDO: planifica con A* y sigue el camino
-        hasta la zona objetivo."""
+        """Planifica y ejecuta una traslación comprobada contra mapa y scan."""
         x_r, y_r, yaw_r = pose
         fila_r_gruesa, col_r_gruesa = self.celda_de(x_r, y_r, self.info_grilla)
 
@@ -971,7 +957,12 @@ class Explorador(Node):
         if punto_seguimiento is None:
             self.detener()
             return
-        if self.objetivo_sin_avance(objetivo_grueso, x_r, y_r):
+        distancia_restante = math.hypot(
+            punto_seguimiento[0] - x_r, punto_seguimiento[1] - y_r)
+        distancia_restante += sum(
+            math.hypot(a[0] - b[0], a[1] - b[1]) * self.info_mapa.resolution
+            for a, b in zip(self.camino, self.camino[1:]))
+        if self.objetivo_sin_avance(objetivo_grueso, x_r, y_r, distancia_restante):
             self.get_logger().warn(
                 f'Objetivo {objetivo_grueso} sin avance durante '
                 f'{self.timeout_sin_avance_s:.0f} s; se probará otro objetivo. '
@@ -985,23 +976,16 @@ class Explorador(Node):
             self.publicar_camino([])
             self.detener()
             return
-        distancia_restante = math.hypot(
-            punto_seguimiento[0] - x_r, punto_seguimiento[1] - y_r)
-        distancia_restante += sum(
-            math.hypot(a[0] - b[0], a[1] - b[1]) * self.info_mapa.resolution
-            for a, b in zip(self.camino, self.camino[1:]))
         vx_atr, vy_atr, _ = self.vector_hacia(
             x_r, y_r, yaw_r, punto_seguimiento, distancia_restante)
-        repulsion = self.vector_repulsivo()
-        if repulsion is None:
+        impactos = self.impactos_en_base()
+        if impactos is None:
             self.get_logger().warn(
-                'Frenado: scan vencido o transformación del láser no disponible.',
+                'Frenado: scan inválido, vencido o sin transformación a la base.',
                 throttle_duration_sec=10.0)
             self.detener()
             return
-        vx_rep, vy_rep = repulsion
-
-        vx, vy = vx_atr + vx_rep, vy_atr + vy_rep
+        vx, vy = vx_atr, vy_atr
         magnitud = math.hypot(vx, vy)
         if magnitud > self.velocidad_maxima:
             vx *= self.velocidad_maxima / magnitud
@@ -1009,6 +993,22 @@ class Explorador(Node):
 
         vx = self.suavizado * vx + (1.0 - self.suavizado) * self.vx_anterior
         vy = self.suavizado * vy + (1.0 - self.suavizado) * self.vy_anterior
+        celda_inicio = self.celda_fina_segura(x_r, y_r)
+        c, sn = math.cos(yaw_r), math.sin(yaw_r)
+
+        def mapa_seguro(dx, dy):
+            fin = self.celda_fina_segura(x_r + c * dx - sn * dy, y_r + sn * dx + c * dy)
+            return segmento_transitable(self.libre_fino, celda_inicio, fin)
+
+        (vx, vy), motivo = regular_traslacion(
+            (vx, vy), impactos, self.largo_robot, self.ancho_robot,
+            self.margen_seguridad, self.velocidad_maxima, mapa_seguro,
+            horizonte=self.horizonte_colision_s, desaceleracion=self.desaceleracion_segura,
+            velocidad_pasillo=self.velocidad_pasillo)
+        if motivo == 'obstaculo_o_margen':
+            self.get_logger().warn(
+                'Frenado preventivo: el barrido de la huella no tiene espacio libre.',
+                throttle_duration_sec=5.0)
         self.vx_anterior, self.vy_anterior = vx, vy
 
         cmd = Twist()
@@ -1022,7 +1022,18 @@ class Explorador(Node):
     def controlar(self):
         pose = self.obtener_pose_robot()
 
+        if pose is not None and self.info_mapa is not None:
+            self.actualizar_orientacion_huella(pose[2])
+        estado_anterior = self.estado
         self.transicionar(pose)
+        if self.estado == ESTADO_TERMINADO and estado_anterior != ESTADO_TERMINADO:
+            if self.futuro_plan is not None:
+                self.futuro_plan.cancel()
+            self.futuro_plan = None
+            self.camino = None
+            self.objetivo_celda = None
+            self.objetivo_mision = None
+            self.publicar_camino([])
         self.pub_estado.publish(String(data=self.estado))
 
         if self.estado in (
@@ -1061,6 +1072,7 @@ def main(args=None):
                     if nodo.context.ok():
                         raise
         finally:
+            nodo.ejecutor_plan.shutdown(wait=False, cancel_futures=True)
             nodo.destroy_node()
             rclpy.try_shutdown()
 
