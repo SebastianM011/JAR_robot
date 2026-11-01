@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'jar_localizacion'
+package_name = 'localizacion'
 
 setup(
     name=package_name,
@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'campo_verosimilitud = localizacion.campo_verosimilitud:main',
+            'localizador = localizacion.localizador:main',
         ],
     },
 )
