@@ -61,11 +61,61 @@ Para hardware usar `simulacion:=false use_sim_time:=false map:=/ruta/mapa.yaml`;
 los drivers deben proveer `/scan`, odometría y TF `odom -> base_footprint`,
 y consumir `/cmd_vel`. Este launch no inicia drivers del robot físico.
 
-Los paquetes `jar_localizacion`, `jar_navegacion`, `jar_percepcion` y
-`jar_mision` todavía no tienen ejecutables. Sus futuros launch se pueden
-incluir desde este archivo; al integrar el localizador propio, desactivar o
-reemplazar el bloque AMCL. No se usan transformaciones estáticas ficticias
-para suplir localización.
+Para usar el filtro de partículas propio en lugar de AMCL:
+
+```bash
+ros2 launch jar_bringup navegacion.launch.py localizador:=jar
+```
+
+Con `localizador:=jar` se inician `campo_verosimilitud` y `localizador` de
+`jar_localizacion` (sus parámetros están en `config/navegacion.yaml`); ambos
+escuchan `initialpose`, así que **2D Pose Estimate** re-siembra las partículas.
+No se usan transformaciones estáticas ficticias para suplir localización.
+
+Los demás paquetes tienen sus propios launch:
+
+- `ros2 launch jar_localizacion localizacion.launch.py`: `map_server` y filtro propio.
+- `ros2 launch jar_percepcion percepcion.launch.py`: `detector_color`
+  (`/rojo_detectado`), `detector_scan` (`/scan_rojo`) y `detector_obstaculos`
+  (`/objetos_no_mapeados`). Requiere `/likelihood_map` y `map -> odom`.
+- `ros2 launch jar_mision victimas.launch.py`: `/scan_rojo` → `/objetos_rojos`
+  → `juntar_victimas` → `/victimas`. Requiere localización.
+- `ros2 launch jar_navegacion nav2.launch.py`: Nav2 completo (semana 09); con
+  `localizacion:=false` no inicia AMCL ni `map_server`.
+- `ros2 launch jar_navegacion evasion.launch.py`: simulador y evasor reactivo
+  (semana 03). En vez del cono del workshop, comprueba el recorrido de la misma
+  huella de 0.37 × 0.24 m que usa el explorador (`jar_exploracion.seguridad`) y
+  frena si el scan no trae datos. Publica en `cmd_vel`; no combinar con el
+  explorador ni con Nav2.
+- `ros2 run jar_localizacion medir_odometria` y `odom_corregida`: miden y
+  muestran el error de escala de `/odom` contra IMU y lidar (semana 10).
+  `odom_corregida` publica en los mismos caminos que `localizador`; no
+  correrlos juntos.
+
+## Robot real y bag de la semana 10
+
+`robot_real.launch.py` localiza al robot en `maps/laberinto_vacio.yaml` con el
+filtro propio y reporta las cajas rojas en `/victimas`. No inicia drivers.
+Para reproducir el bag de la semana 10:
+
+```bash
+# Terminal 1
+ros2 bag play ~/rosmaster_ws/bags/laberinto_victimas --clock -p
+# Terminal 2
+ros2 launch jar_bringup robot_real.launch.py
+```
+
+`config/robot_real.yaml` tiene las escalas medidas en ese bag:
+`escala_avance: 0.784` (lidar trasero contra `/odom`) y `escala_giro: 0.804`
+(IMU contra `/odom`). El IMU del bag tiene el giro con el signo invertido; el
+scan matching del lidar coincide en signo con `/odom`, así que la escala es
+positiva. Sin escalas el filtro se pierde después de los primeros giros.
+`giro_maximo: 0.3` evita marcar rojo mientras el robot gira rápido.
+
+Evaluado sin ROS sobre el bag, con el mismo código de los paquetes, este pipeline
+reporta las dos cajas a 5.6 cm y 3.6 cm de sus centros reales (200/200 con las
+reglas de `evaluador_victimas`). Para puntuar en vivo, correr además
+`ros2 launch evaluador_victimas evaluador.launch.py` desde `jar_workshops`.
 
 ## Renderizado de RViz
 

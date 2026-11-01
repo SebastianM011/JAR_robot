@@ -1,0 +1,27 @@
+detector_color:
+  ros__parameters:
+    hue_rojo_bajo_1: 0.0
+    hue_rojo_alto_1: 10.0
+    hue_rojo_bajo_2: 170.0
+    hue_rojo_alto_2: 180.0
+    saturacion_min: 120.0
+    valor_min: 80.0
+    area_minima_px: 800.0
+
+detector_scan_color:
+  ros__parameters:
+    hue_rojo_bajo_1: 0.0
+    hue_rojo_alto_1: 10.0
+    hue_rojo_bajo_2: 170.0
+    hue_rojo_alto_2: 180.0
+    saturacion_min: 120.0
+    valor_min: 80.0
+    # rad/s; 0 desactiva el filtro. En el robot real empezar con 0.3.
+    giro_maximo: 0.0
+
+detector_obstaculos:
+  ros__parameters:
+    map_frame: map
+    umbral_probabilidad: 25.0
+    racha_minima: 3
+    distancia_minima_valida: 0.25

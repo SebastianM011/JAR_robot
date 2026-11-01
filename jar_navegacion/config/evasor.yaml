@@ -1,0 +1,11 @@
+evasor:
+  ros__parameters:
+    base_frame: base_footprint
+    # Misma huella que el explorador (ver jar_bringup/config/navegacion.yaml).
+    largo_robot: 0.37
+    ancho_robot: 0.24
+    margen_seguridad: 0.05
+    distancia_choque_m: 0.4
+    velocidad_adelante: 0.3
+    velocidad_angular: 1.0
+    angulo_giro_deg: 110.0

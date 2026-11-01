@@ -1,0 +1,22 @@
+detector_scan_color:
+  ros__parameters:
+    # rad/s; 0 desactiva el filtro. En el robot real empezar con 0.3.
+    giro_maximo: 0.0
+
+# detector_obstaculos sobre /scan_rojo: los puntos ya son rojos, así que
+# el umbral deja pasar todos (las cajas suelen estar pegadas a paredes).
+detector_victimas:
+  ros__parameters:
+    map_frame: map
+    umbral_probabilidad: 101.0
+    racha_minima: 3
+    distancia_minima_valida: 0.25
+
+juntar_victimas:
+  ros__parameters:
+    victimas: 2
+    detecciones_minimas: 30
+    radio_grupo: 0.30
+    mitad_caja: 0.09
+    map_frame: map
+    base_frame: base_footprint

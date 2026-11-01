@@ -22,6 +22,8 @@ def generate_launch_description():
         DeclareLaunchArgument('simulacion', default_value='true'),
         DeclareLaunchArgument('localizacion', default_value='true',
                               description='Iniciar map_server y AMCL provisionales'),
+        DeclareLaunchArgument('localizador', default_value='amcl', choices=['amcl', 'jar'],
+                              description='AMCL de Nav2 o el filtro de jar_localizacion'),
         DeclareLaunchArgument('exploracion', default_value='true'),
         DeclareLaunchArgument('porcentaje_objetivo', default_value='98.0',
                               description='Porcentaje de celdas libres cubiertas para terminar'),
@@ -58,17 +60,33 @@ def generate_launch_description():
         }.items(),
     )
     clock = {'use_sim_time': ParameterValue(config('use_sim_time'), value_type=bool)}
+
+    def localizador_es(nombre):
+        return IfCondition(PythonExpression([
+            "'", config('localizacion'), "' == 'true' and '",
+            config('localizador'), "' == '", nombre, "'"]))
+
     localization_nodes = [
         Node(package='nav2_map_server', executable='map_server', name='map_server',
              output='screen', condition=IfCondition(config('localizacion')),
              parameters=[config('params_file'), clock, {'yaml_filename': config('map')}]),
         Node(package='nav2_amcl', executable='amcl', name='amcl', output='screen',
-             condition=IfCondition(config('localizacion')),
+             condition=localizador_es('amcl'),
              parameters=[config('params_file'), clock]),
         Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
              name='lifecycle_manager_localizacion', output='screen',
-             condition=IfCondition(config('localizacion')),
+             condition=localizador_es('amcl'),
              parameters=[clock, {'autostart': True, 'node_names': ['map_server', 'amcl']}]),
+        Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
+             name='lifecycle_manager_localizacion', output='screen',
+             condition=localizador_es('jar'),
+             parameters=[clock, {'autostart': True, 'node_names': ['map_server']}]),
+        Node(package='jar_localizacion', executable='campo_verosimilitud',
+             name='campo_verosimilitud', output='screen', condition=localizador_es('jar'),
+             parameters=[config('params_file'), clock]),
+        Node(package='jar_localizacion', executable='localizador', name='localizador',
+             output='screen', condition=localizador_es('jar'),
+             parameters=[config('params_file'), clock]),
     ]
     coverage = Node(
         package='jar_exploracion', executable='grilla_cobertura',

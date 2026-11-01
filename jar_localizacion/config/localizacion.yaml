@@ -1,0 +1,29 @@
+map_server:
+  ros__parameters:
+    frame_id: map
+    topic_name: map
+
+campo_verosimilitud:
+  ros__parameters:
+    sigma_sensor: 0.2
+
+localizador:
+  ros__parameters:
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    num_particulas: 300
+    pose_inicial_x: 0.0
+    pose_inicial_y: 0.0
+    pose_inicial_theta: 0.0
+    dispersion_inicial_xy: 0.3
+    dispersion_inicial_theta: 0.3
+    gamma1: 0.0025
+    gamma2: 0.0025
+    gamma3: 0.0025
+    gamma4: 0.0025
+    gamma5: 0.0025
+    gamma6: 0.0025
+    escala_avance: 1.0
+    escala_giro: 1.0
+    submuestreo_scan: 15
