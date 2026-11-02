@@ -248,3 +248,59 @@ def test_umbral_cancela_camino_y_frena(nodo, monkeypatch):
     assert n.camino is None and n.objetivo_mision is None
     assert n.pub_estado.publish.call_args.args[0].data == 'terminado'
     assert n.pub_cmd_vel.publish.call_args.args[0].linear.x == 0.0
+
+
+def test_caja_fuera_del_mapa_replanifica_por_un_costado_y_expira(nodo):
+    """Una caja vista por lidar corta la ruta directa y A* encuentra un rodeo."""
+    from concurrent.futures import Future
+    from sensor_msgs.msg import LaserScan
+    from jar_exploracion.planificador import a_estrella, segmento_transitable
+
+    n, _, reloj = nodo
+    msg = mapa()
+    msg.info.width = msg.info.height = 80
+    msg.data = [0] * 6400
+    n.recibir_mapa(msg)
+    inicio = n.celda_de(0.8, 2.0, n.info_mapa)
+    fin = n.celda_de(3.2, 2.0, n.info_mapa)
+    n.camino = a_estrella(n.libre_fino, inicio, fin)
+    assert segmento_transitable(n.libre_fino, inicio, fin)
+    pendiente = Future()
+    n.futuro_plan = pendiente
+    n.recibir_scan(LaserScan())
+    # Cara de una caja a x=2 m, coordenadas relativas a la base en (0.8, 2).
+    impactos = np.array([(1.2, y) for y in np.linspace(-0.125, 0.125, 11)])
+    n.actualizar_obstaculos((0.8, 2.0, 0.0), impactos)
+    assert pendiente.cancelled()
+    assert n.camino is None
+    assert not segmento_transitable(n.libre_fino, inicio, fin)
+    rodeo = a_estrella(n.libre_fino, inicio, fin)
+    assert rodeo
+    assert max(abs(f - inicio[0]) for f, _ in rodeo) >= 10
+    assert all(segmento_transitable(n.libre_fino, a, b)
+               for a, b in zip(rodeo, rodeo[1:]))
+    # No modifica el mapa original ni renueva la memoria con un scan repetido.
+    assert np.all(n.datos_mapa == 0)
+    reloj.now.return_value = Time(seconds=109)
+    n.actualizar_obstaculos((0.8, 2.0, 0.0), impactos)
+    assert segmento_transitable(n.libre_fino, inicio, fin)
+
+
+def test_impactos_rotados_y_pose_corregida_descarta_obstaculos(nodo):
+    """Los impactos usan la pose del robot y no sobreviven a una relocalización."""
+    import math
+    from sensor_msgs.msg import LaserScan
+
+    n, _, _ = nodo
+    n.recibir_mapa(mapa())
+    n.recibir_scan(LaserScan())
+    n.actualizar_obstaculos((0.5, 0.5, math.pi / 2), np.array([(0.3, 0.)]))
+    celda = n.celda_de(0.5, 0.8, n.info_mapa)
+    assert n.datos_planificacion[celda] == 100
+    msg = PoseWithCovarianceStamped()
+    msg.header.frame_id = 'map'
+    n.recibir_pose_inicial(msg)
+    n.recibir_scan(LaserScan())
+    n.actualizar_obstaculos((0.5, 0.5, 0.), np.empty((0, 2)))
+    assert not n.obstaculos_temporales
+    assert n.datos_planificacion[celda] == 0

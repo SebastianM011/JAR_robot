@@ -196,3 +196,13 @@ Se combina con `world` y `map` para cualquier escenario. Consultar el valor actu
 con `ros2 topic echo /porcentaje_cobertura --once`. El umbral admite valores
 mayores que 0 y hasta 100. Los estados de bloqueo por deslizamiento conservan
 su prioridad: no se declara éxito mientras la localización está invalidada.
+
+## Cajas y obstáculos fuera del mapa
+
+El explorador incorpora los impactos válidos del láser al mapa de planificación,
+con la misma huella rectangular y margen de seguridad. Si bloquean el camino,
+descarta la ruta anterior y vuelve a ejecutar A* para buscar un rodeo. El mapa
+original y la cobertura no se modifican. La memoria de cada impacto dura ocho
+segundos desde su última observación; una corrección con **2D Pose Estimate**
+la descarta. El control predictivo sigue comprobando el scan antes de moverse.
+Si no existe paso con el margen requerido, no fuerza el paso.

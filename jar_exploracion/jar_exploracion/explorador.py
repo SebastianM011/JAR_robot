@@ -136,6 +136,8 @@ class Explorador(Node):
         self.datos_mapa_fuente = None
         self.no_cubiertas = None    # bool[alto, ancho], resolución de grilla_cobertura
         self.info_grilla = None     # MapMetaData de grilla_cobertura (resolución gruesa)
+        self.obstaculos_temporales = {}
+        self.scan_integrado = None
         self.ultimo_scan = None
         self.momento_scan = None
         self.objetivos_pendientes = {}
@@ -220,6 +222,9 @@ class Explorador(Node):
         dist_a_pared = nd.distance_transform_edt(~ocupado) * info.resolution
         self.distancia_a_pared = dist_a_pared
         self.datos_mapa = datos
+        self.obstaculos_temporales.clear()
+        self.scan_integrado = None
+        self.datos_planificacion = datos.copy()
 
         # Huella rectangular, margen y tamaño de píxel para la orientación actual.
         self.libre_fino = espacio_transitable(
@@ -248,7 +253,8 @@ class Explorador(Node):
             return
         self.yaw_huella = yaw
         self.libre_fino = espacio_transitable(
-            self.datos_mapa, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
+            self.datos_planificacion, self.info_mapa.resolution,
+            self.largo_robot, self.ancho_robot,
             self.margen_seguridad + 0.006,
             yaw - yaw_de_quaternion(self.info_mapa.origin.orientation))
         self.componentes_libres, _ = nd.label(self.libre_fino)
@@ -257,6 +263,55 @@ class Explorador(Node):
             cache.clear()
         self.zonas_sin_destino.clear()
         self.camino = None
+        self.publicar_camino([], conservar_objetivo=True)
+        self.detener()
+
+    def actualizar_obstaculos(self, pose, impactos):
+        """Integra impactos en el mapa de planificación durante ocho segundos."""
+        ahora = self.get_clock().now().nanoseconds / 1e9
+        self.obstaculos_temporales = {
+            celda: instante for celda, instante in self.obstaculos_temporales.items()
+            if 0 <= ahora - instante <= 8.0}
+        if self.scan_integrado is not self.ultimo_scan:
+            x, y, yaw = pose
+            c, s = math.cos(yaw), math.sin(yaw)
+            alto, ancho = self.datos_mapa.shape
+            for bx, by in impactos:
+                fila, col = self.celda_de(x + c * bx - s * by,
+                                          y + s * bx + c * by, self.info_mapa)
+                if (0 <= fila < alto and 0 <= col < ancho
+                        and self.datos_mapa[fila, col] == 0):
+                    self.obstaculos_temporales[fila, col] = ahora
+            self.scan_integrado = self.ultimo_scan
+        datos = self.datos_mapa.copy()
+        for celda in self.obstaculos_temporales:
+            datos[celda] = 100
+        if np.array_equal(datos, self.datos_planificacion):
+            return
+        self.datos_planificacion = datos
+        libres = espacio_transitable(
+            datos, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
+            self.margen_seguridad + 0.006,
+            self.yaw_huella - yaw_de_quaternion(self.info_mapa.origin.orientation))
+        if np.array_equal(libres, self.libre_fino):
+            return
+        self.libre_fino = libres
+        distancia = nd.distance_transform_edt(datos == 0) * self.info_mapa.resolution
+        self.costo_fino = 100.0 * np.exp(-(distancia ** 2) / (2.0 * self.sigma_costo ** 2))
+        self.componentes_libres, _ = nd.label(libres)
+        for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
+                      self.cursores_observacion, self.puntos_observacion):
+            cache.clear()
+        self.zonas_sin_destino.clear()
+        # Ningún resultado calculado con el mapa anterior puede reutilizarse.
+        if self.futuro_plan is not None:
+            self.futuro_plan.cancel()
+        self.futuro_plan = None
+        self.clave_plan = None
+        if self.camino and all(libres[celda] for celda in self.camino):
+            return
+        self.camino = None
+        self.seguimiento_avance = None
         self.publicar_camino([], conservar_objetivo=True)
         self.detener()
 
@@ -317,6 +372,8 @@ class Explorador(Node):
         self.objetivos_pendientes.clear()
         self.objetivo_mision = None
         self.detector_deslizamiento.reiniciar()
+        self.obstaculos_temporales.clear()
+        self.scan_integrado = None
         if self.futuro_plan is not None:
             self.futuro_plan.cancel()
         self.futuro_plan = None
@@ -889,6 +946,11 @@ class Explorador(Node):
     def actuar(self, pose):
         """Planifica y ejecuta una traslación comprobada contra mapa y scan."""
         x_r, y_r, yaw_r = pose
+        impactos = self.impactos_en_base()
+        if impactos is None:
+            self.detener()
+            return
+        self.actualizar_obstaculos(pose, impactos)
         fila_r_gruesa, col_r_gruesa = self.celda_de(x_r, y_r, self.info_grilla)
 
         celda_robot = self.celda_fina_segura(x_r, y_r)
