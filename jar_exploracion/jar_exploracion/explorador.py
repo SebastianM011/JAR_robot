@@ -943,7 +943,15 @@ class Explorador(Node):
         cmd.angular.z = self.mirada.actualizar(yaw, ahora)
         if not self.mirada.activa:
             self.recorrido_desde_mirada = 0.0
-            self.get_logger().info('Mirada completa.')
+            mensajes = {
+                'completa': 'Mirada completa.',
+                'alineada_por_tiempo': 'Mirada cortada por tiempo; robot alineado con el mapa.',
+                'abandonada': 'Mirada abandonada: el robot no llegó a alinearse con el mapa.',
+            }
+            nivel = self.get_logger().info if self.mirada.resultado == 'completa' \
+                else self.get_logger().warn
+            nivel(f'{mensajes.get(self.mirada.resultado, "Mirada terminada.")} '
+                  f'Orientación final {math.degrees(yaw):.0f}°.')
         # El tiempo girando no cuenta para timeout_sin_avance_s.
         self.seguimiento_avance = None
         self.vx_anterior = self.vy_anterior = 0.0
