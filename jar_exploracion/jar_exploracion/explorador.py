@@ -22,6 +22,7 @@ from visualization_msgs.msg import Marker
 
 from tf2_ros import Buffer, TransformListener
 
+from jar_exploracion.mirada import MiradaPorPasos, giro_seguro, radio_de_giro
 from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
 from jar_exploracion.trazado import trazar_rayo
 from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
@@ -74,6 +75,11 @@ class Explorador(Node):
         self.declare_parameter('desaceleracion_segura', 0.4)
         self.declare_parameter('subdivisiones_mapa', 2)
         self.declare_parameter('porcentaje_objetivo', 98.0)
+        # Giro de 360° por pasos para que la cámara mire alrededor; 0 lo desactiva.
+        self.declare_parameter('distancia_entre_miradas', 1.5)
+        self.declare_parameter('pasos_mirada', 8)
+        self.declare_parameter('pausa_mirada_s', 0.6)
+        self.declare_parameter('velocidad_mirada', 0.6)
 
         self.largo_robot = self.get_parameter('largo_robot').value
         self.ancho_robot = self.get_parameter('ancho_robot').value
@@ -126,6 +132,18 @@ class Explorador(Node):
         self.vy_anterior = 0.0
         self.origen = None
         self.regreso_pendiente = False
+        self.distancia_entre_miradas = self.get_parameter('distancia_entre_miradas').value
+        self.mirada = MiradaPorPasos(
+            pasos=self.get_parameter('pasos_mirada').value,
+            pausa_s=self.get_parameter('pausa_mirada_s').value,
+            velocidad=self.get_parameter('velocidad_mirada').value)
+        if self.distancia_entre_miradas < 0 or self.mirada.pasos < 1:
+            raise ValueError('distancia_entre_miradas y pasos_mirada no pueden ser negativos')
+        self.radio_giro = radio_de_giro(
+            self.largo_robot, self.ancho_robot, self.margen_seguridad)
+        # Arranca vencido: la primera mirada es al empezar a explorar.
+        self.recorrido_desde_mirada = math.inf
+        self.ultima_posicion = None
         self.pose_inicial_confirmada = False
         self.momento_confirmacion = None
 
@@ -392,6 +410,8 @@ class Explorador(Node):
         self.cache_zonas_alcanzables.clear()
         self.pose_inicial_confirmada = True
         self.momento_confirmacion = self.get_clock().now()
+        self.mirada.activa = False
+        self.ultima_posicion = None
         if self.estado != ESTADO_INICIALIZANDO:
             self.estado = ESTADO_INICIALIZANDO
             self.camino = None
@@ -881,6 +901,56 @@ class Explorador(Node):
 
     # ---------- máquina de estados ----------
 
+    def holgura_de_giro(self, x, y):
+        """Distancia al obstáculo más cercano, incluidos los temporales del scan."""
+        fila, col = self.celda_de(x, y, self.info_mapa)
+        alto, ancho = self.datos_planificacion.shape
+        if not (0 <= fila < alto and 0 <= col < ancho):
+            return None
+        distancias = nd.distance_transform_edt(self.datos_planificacion == 0)
+        return float(distancias[fila, col]) * self.info_mapa.resolution
+
+    def mirar_alrededor(self, pose):
+        """
+        Avanza o inicia el giro de 360°; devuelve True si controló el robot.
+
+        Solo se gira donde cabe el círculo que barre la huella, según mapa y
+        scan; en un pasillo angosto la mirada queda pendiente.
+        """
+        x, y, yaw = pose
+        ahora = self.get_clock().now().nanoseconds / 1e9
+        if self.ultima_posicion is not None and not self.mirada.activa:
+            self.recorrido_desde_mirada += math.dist((x, y), self.ultima_posicion)
+        self.ultima_posicion = (x, y)
+        if self.estado != ESTADO_EXPLORANDO or self.distancia_entre_miradas == 0:
+            self.mirada.activa = False
+            return False
+        if not self.mirada.activa and self.recorrido_desde_mirada < self.distancia_entre_miradas:
+            return False
+        impactos = self.impactos_en_base()
+        if impactos is None or not giro_seguro(
+                impactos, self.holgura_de_giro(x, y), self.radio_giro):
+            if self.mirada.activa:
+                self.mirada.activa = False
+                self.seguimiento_avance = None
+                self.get_logger().warn('Mirada interrumpida: hay algo dentro del radio de giro.')
+            return False
+        if not self.mirada.activa:
+            self.detener()
+            self.mirada.iniciar(yaw, ahora)
+            self.get_logger().info('Mirada de 360° por pasos.')
+        cmd = Twist()
+        cmd.angular.z = self.mirada.actualizar(yaw, ahora)
+        if not self.mirada.activa:
+            self.recorrido_desde_mirada = 0.0
+            self.get_logger().info('Mirada completa.')
+        # El tiempo girando no cuenta para timeout_sin_avance_s.
+        self.seguimiento_avance = None
+        self.vx_anterior = self.vy_anterior = 0.0
+        self.velocidad_ordenada = 0.0
+        self.pub_cmd_vel.publish(cmd)
+        return True
+
     def porcentaje_cobertura(self):
         """Cuenta solo celdas libres; paredes y desconocidos no forman el denominador."""
         if self.total_celdas_libres == 0:
@@ -1120,7 +1190,8 @@ class Explorador(Node):
     def controlar(self):
         pose = self.obtener_pose_robot()
 
-        if pose is not None and self.info_mapa is not None:
+        # Durante la mirada el yaw recorre una vuelta y vuelve al inicial.
+        if pose is not None and self.info_mapa is not None and not self.mirada.activa:
             self.actualizar_orientacion_huella(pose[2])
         estado_anterior = self.estado
         self.transicionar(pose)
@@ -1148,7 +1219,10 @@ class Explorador(Node):
             self.get_logger().warn(
                 'Frenado: no llega scan o supera timeout_scan_s.',
                 throttle_duration_sec=10.0)
+            self.mirada.activa = False
             self.detener()
+            return
+        if self.mirar_alrededor(pose):
             return
         self.actuar(pose)
 

@@ -18,5 +18,11 @@ juntar_victimas:
     detecciones_minimas: 30
     radio_grupo: 0.30
     mitad_caja: 0.09
+    # Reporta los mejores grupos cuando el explorador pasa a
+    # regresando_al_origen (o con un mensaje en /reportar_victimas).
+    modo_reporte: al_final
+    tiempo_limite_s: 0.0
+    detecciones_minimas_final: 10
+    separacion_reportes: 0.5
     map_frame: map
     base_frame: base_footprint

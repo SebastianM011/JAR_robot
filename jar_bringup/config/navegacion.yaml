@@ -60,3 +60,9 @@ explorador:
     margen_seguridad: 0.05
     timeout_scan_s: 0.5
     tiempo_asentamiento_s: 3.0
+    # Giro de 360° en 8 pasos de 45° con pausas, cada 1.5 m recorridos, para que
+    # la cámara frontal (61° de campo visual) mire alrededor. 0 lo desactiva.
+    distancia_entre_miradas: 1.5
+    pasos_mirada: 8
+    pausa_mirada_s: 0.6
+    velocidad_mirada: 0.6

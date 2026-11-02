@@ -375,3 +375,70 @@ def test_regreso_controla_hacia_origen_con_scan_valido(nodo):
     n.actuar((0.7, 0.5, 0.0))
     cmd = n.pub_cmd_vel.publish.call_args.args[0]
     assert cmd.linear.x == cmd.linear.y == 0.0
+
+
+def preparar_mirada(nodo, ancho_pasillo=None):
+    """Mapa con paredes en el borde (y opcionalmente un pasillo) y scan válido."""
+    from sensor_msgs.msg import LaserScan
+
+    n, buffer, _ = nodo
+    msg = mapa()
+    for i in range(20):
+        for j in (0, 19):
+            msg.data[i * 20 + j] = msg.data[j * 20 + i] = 100
+    if ancho_pasillo is not None:
+        # Paredes horizontales a ambos lados de y = 0.5 m.
+        medio = int(ancho_pasillo / 0.05 / 2)
+        for col in range(20):
+            msg.data[(10 - medio - 1) * 20 + col] = 100
+            msg.data[(10 + medio) * 20 + col] = 100
+    n.recibir_mapa(msg)
+    n.recibir_grilla(mapa())
+    n.estado = explorador.ESTADO_EXPLORANDO
+    scan = LaserScan()
+    scan.header.frame_id = 'laser'
+    scan.header.stamp = Time(seconds=100).to_msg()
+    scan.range_min = 0.05
+    scan.range_max = 10.0
+    scan.angle_increment = 0.1
+    scan.ranges = [float('inf')] * 20
+    n.recibir_scan(scan)
+    tf = TransformStamped()
+    tf.transform.rotation.w = 1.0
+    buffer.lookup_transform_full.return_value = tf
+    return n
+
+
+def test_mirada_gira_en_el_lugar_en_espacio_abierto(nodo):
+    """Al empezar a explorar mira alrededor: solo velocidad angular."""
+    n = preparar_mirada(nodo)
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))
+    cmd = n.pub_cmd_vel.publish.call_args.args[0]
+    assert cmd.angular.z > 0.0
+    assert cmd.linear.x == cmd.linear.y == 0.0
+    assert n.mirada.activa
+
+
+def test_mirada_no_gira_en_pasillo_angosto(nodo):
+    """Si el círculo de giro no entra, la mirada queda pendiente y se sigue explorando."""
+    n = preparar_mirada(nodo, ancho_pasillo=0.4)
+    assert not n.mirar_alrededor((0.5, 0.5, 0.0))
+    assert not n.mirada.activa
+    assert n.recorrido_desde_mirada >= n.distancia_entre_miradas
+
+
+def test_mirada_no_gira_al_regresar_ni_desactivada(nodo):
+    n = preparar_mirada(nodo)
+    n.estado = explorador.ESTADO_REGRESANDO
+    assert not n.mirar_alrededor((0.5, 0.5, 0.0))
+    n.estado = explorador.ESTADO_EXPLORANDO
+    n.distancia_entre_miradas = 0.0
+    assert not n.mirar_alrededor((0.5, 0.5, 0.0))
+
+
+def test_mirada_no_consume_el_timeout_sin_avance(nodo):
+    """Girar varios segundos no hace que el objetivo se marque como sin avance."""
+    n = preparar_mirada(nodo)
+    n.seguimiento_avance = ((3, 3), 0.5, 0.5, 0.0, 1.0)
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))
+    assert n.seguimiento_avance is None

@@ -213,6 +213,32 @@ segundos desde su última observación; una corrección con **2D Pose Estimate**
 la descarta. El control predictivo sigue comprobando el scan antes de moverse.
 Si no existe paso con el margen requerido, no fuerza el paso.
 
+## Mirada de 360° para la cámara
+
+La cobertura se marca con el láser, que ve 360°, pero las víctimas se confirman
+con la cámara, que mira solo hacia adelante (unos 61° de campo visual), y el
+explorador se traslada sin girar. Para que la cámara vea todo, al empezar a explorar
+y cada `distancia_entre_miradas` (1.5 m) el robot gira 360° en el lugar en
+`pasos_mirada` tramos de 45°, con una pausa de `pausa_mirada_s` en cada uno.
+En las pausas la imagen sale nítida y `detector_scan` no la descarta por girar
+rápido (`giro_maximo`).
+
+Solo gira donde el círculo que barre la huella (radio 0.27 m) está libre en el
+mapa y en el láser; en un pasillo angosto la mirada queda pendiente hasta un lugar
+más amplio. Termina alineado con la orientación inicial, así que no invalida el
+camino planificado, y el tiempo girando no cuenta para `timeout_sin_avance_s`.
+`distancia_entre_miradas: 0` lo desactiva.
+
+## Reporte de víctimas al final
+
+`juntar_victimas` (`modo_reporte: al_final`) no reporta mientras explora: cuando
+`/estado` pasa a `regresando_al_origen` publica en `/victimas` los grupos con más
+detecciones. Un falso positivo temprano ya no gasta uno de los reportes; en el bag
+de la semana 10 las cajas reales juntan 280 a 434 detecciones y el falso, 1.
+Si sobran reportes, también usa grupos con al menos `detecciones_minimas_final`
+(10): un reporte errado no resta puntos. Para forzar el reporte:
+`ros2 topic pub --once /reportar_victimas std_msgs/msg/Empty`.
+
 ## Inicio integrado de percepción y misión
 
 `navegacion.launch.py` inicia por defecto `jar_percepcion` y `jar_mision`, además

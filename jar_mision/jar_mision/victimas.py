@@ -27,12 +27,16 @@ class AgrupadorVictimas:
     caja, que con un promedio la desplazarían.
     """
 
-    def __init__(self, victimas=2, detecciones_minimas=30, radio_grupo=0.30):
+    def __init__(self, victimas=2, detecciones_minimas=30, radio_grupo=0.30,
+                 inmediato=True):
         self.victimas = victimas
         self.minimas = detecciones_minimas
         self.radio = radio_grupo
+        # Si es False, nada se reporta hasta llamar a cerrar().
+        self.inmediato = inmediato
         self.grupos = []
         self.publicados = 0
+        self.reportes = []
 
     def agregar(self, x, y):
         """Suma el punto a su grupo; devuelve la posición a reportar o None."""
@@ -40,10 +44,36 @@ class AgrupadorVictimas:
             centro = np.median(np.array(grupo['puntos']), axis=0)
             if math.hypot(x - centro[0], y - centro[1]) < self.radio:
                 grupo['puntos'].append((x, y))
-                return self.listo(grupo)
+                return self.listo(grupo) if self.inmediato else None
         grupo = {'puntos': [(x, y)], 'publicado': False}
         self.grupos.append(grupo)
-        return self.listo(grupo)
+        return self.listo(grupo) if self.inmediato else None
+
+    def cerrar(self, minimas_final, separacion):
+        """
+        Elige los reportes que quedan: primero los grupos con más detecciones.
+
+        Usa los grupos con detecciones_minimas y, si sobran reportes, los que
+        tienen al menos minimas_final: un reporte errado no resta puntos. Saltea
+        grupos a menos de `separacion` de un reporte, que serían la misma caja.
+        """
+        elegidos = []
+        candidatos = sorted((g for g in self.grupos if not g['publicado']),
+                            key=lambda g: len(g['puntos']), reverse=True)
+        for minimas in (self.minimas, minimas_final):
+            for grupo in candidatos:
+                if self.publicados >= self.victimas:
+                    return elegidos
+                if grupo['publicado'] or len(grupo['puntos']) < minimas:
+                    continue
+                x, y = (float(v) for v in np.median(np.array(grupo['puntos']), axis=0))
+                if any(math.hypot(x - rx, y - ry) < separacion for rx, ry in self.reportes):
+                    continue
+                grupo['publicado'] = True
+                self.publicados += 1
+                self.reportes.append((x, y))
+                elegidos.append((x, y))
+        return elegidos
 
     def listo(self, grupo):
         """Marca el grupo como publicado si alcanzó las detecciones mínimas."""
@@ -53,4 +83,5 @@ class AgrupadorVictimas:
         grupo['publicado'] = True
         self.publicados += 1
         x, y = np.median(np.array(grupo['puntos']), axis=0)
+        self.reportes.append((float(x), float(y)))
         return float(x), float(y)
