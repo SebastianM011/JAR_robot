@@ -20,7 +20,7 @@ setup(
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
     description='Detección de color y de obstáculos no mapeados',
-    license='TODO: License declaration',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

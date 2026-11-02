@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Ubicación de víctimas en el mapa y reporte en /victimas</description>
   <maintainer email="2006sebastianm@gmail.com">sebastian</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>

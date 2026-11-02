@@ -20,7 +20,7 @@ setup(
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
     description='Localización en el mapa con filtro de partículas propio',
-    license='TODO: License declaration',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

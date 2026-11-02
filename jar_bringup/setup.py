@@ -22,7 +22,7 @@ setup(
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
     description='Inicio integrado de navegación y exploración de JAR',
-    license='TODO: License declaration',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

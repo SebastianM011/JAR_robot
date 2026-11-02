@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Detección de rojo con cámara y lidar, y de obstáculos no mapeados</description>
   <maintainer email="2006sebastianm@gmail.com">sebastian</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>

@@ -20,7 +20,7 @@ setup(
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
     description='Ubicación y reporte de víctimas en el mapa',
-    license='TODO: License declaration',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

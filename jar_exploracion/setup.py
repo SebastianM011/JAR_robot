@@ -15,8 +15,8 @@ setup(
     zip_safe=True,
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Grilla de cobertura y exploración autónoma del mapa con A*',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

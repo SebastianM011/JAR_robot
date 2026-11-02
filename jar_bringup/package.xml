@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Inicio integrado de navegación y exploración de JAR</description>
   <maintainer email="2006sebastianm@gmail.com">sebastian</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <exec_depend>launch</exec_depend>

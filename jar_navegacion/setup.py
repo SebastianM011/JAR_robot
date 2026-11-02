@@ -20,7 +20,7 @@ setup(
     maintainer='sebastian',
     maintainer_email='2006sebastianm@gmail.com',
     description='Evasión reactiva y configuración de Nav2 para JAR',
-    license='TODO: License declaration',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',
