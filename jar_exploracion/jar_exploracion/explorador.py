@@ -1201,9 +1201,12 @@ class Explorador(Node):
             fin = self.celda_fina_segura(x_r + c * dx - sn * dy, y_r + sn * dx + c * dy)
             return segmento_transitable(self.libre_fino, celda_inicio, fin)
 
+        # Las paredes del mapa ya tienen margen_seguridad en mapa_seguro; contra
+        # el scan se usa el mismo margen que el planificador da a las cajas, o
+        # el robot frena en caminos que el planificador sí considera libres.
         (vx, vy), motivo = regular_traslacion(
             (vx, vy), impactos, self.largo_robot, self.ancho_robot,
-            self.margen_seguridad, self.velocidad_maxima, mapa_seguro,
+            self.margen_obstaculos_scan, self.velocidad_maxima, mapa_seguro,
             horizonte=self.horizonte_colision_s, desaceleracion=self.desaceleracion_segura,
             velocidad_pasillo=self.velocidad_pasillo)
         if motivo == 'obstaculo_o_margen':

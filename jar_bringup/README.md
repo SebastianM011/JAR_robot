@@ -241,7 +241,9 @@ las paredes, dejaba un paso de 2 cm entre ella y la punta de una pared.
   se ignoran: son esa pared vista con error, no un obstáculo nuevo.
 - Los obstáculos que solo ve el scan se inflan con `margen_obstaculos_scan` (2 cm).
   Las paredes del mapa, dibujadas más gruesas que las reales, mantienen
-  `margen_seguridad`. El frenado sigue comprobando la huella contra el scan.
+  `margen_seguridad`. El frenado predictivo usa el mismo margen contra el scan
+  (si no, frena en caminos que el planificador considera libres) y sigue
+  comprobando el barrido contra el mapa con `margen_seguridad`.
 
 Con un scan simulado sobre la geometría real del mundo, el robot queda encerrado
 en 7 de 8 errores de pose de hasta 8 cm sin estos cambios, y en 3 de 8 con ellos

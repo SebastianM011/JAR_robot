@@ -467,3 +467,25 @@ def test_obstaculos_del_scan_usan_margen_menor(nodo):
     n.margen_obstaculos_scan = n.margen_seguridad
     con_margen_pared = n.espacio_libre(datos, 0.0).sum()
     assert con_margen_scan > con_margen_pared
+
+
+def test_frenado_usa_el_margen_de_obstaculos_del_scan(nodo, monkeypatch):
+    """El control en vivo no exige más margen a una caja que el planificador."""
+    n = preparar_mirada(nodo)
+    usados = []
+    original = explorador.regular_traslacion
+
+    def espia(velocidad, puntos, largo, ancho, margen, *args, **kwargs):
+        usados.append(margen)
+        return original(velocidad, puntos, largo, ancho, margen, *args, **kwargs)
+
+    monkeypatch.setattr(explorador, 'regular_traslacion', espia)
+    n.recibir_grilla(mapa())
+    cobertura = mapa()
+    cobertura.data[10 * 20 + 14] = 100
+    n.recibir_grilla(cobertura)
+    n.actuar((0.5, 0.5, 0.0))
+    if n.futuro_plan is not None:
+        n.futuro_plan.result(timeout=5)
+        n.actuar((0.5, 0.5, 0.0))
+    assert usados and all(m == n.margen_obstaculos_scan for m in usados)
