@@ -116,10 +116,18 @@ positiva. Sin escalas el filtro se pierde después de los primeros giros.
 `giro_maximo: 0.3` evita marcar rojo mientras el robot gira rápido.
 
 Corrido en ROS Humble (imagen `yahboom_rosmaster`) sobre el bag completo, con
-`ros2 launch evaluador_victimas evaluador.launch.py` de `jar_workshops`, puntúa
-**200/200**: reporta las cajas a 3.7 cm y 16.1 cm de sus centros reales. La
-segunda se reporta a los pocos segundos de arrancar, mientras el filtro todavía
-converge desde la pose inicial; por eso queda más lejos que la otra.
+`evaluador_victimas` de `jar_workshops`, puntúa **200/200** en cada corrida: las
+cajas quedan a ~1 cm y ~3 cm de sus centros reales. Para comprobarlo:
+
+```bash
+tools/verificar.sh tests    # colcon build + colcon test
+tools/verificar.sh bag 3    # 3 corridas del bag con el evaluador (~8 min)
+```
+
+El script corre cada prueba en un contenedor propio con un `ROS_DOMAIN_ID` aparte.
+Si dos pipelines comparten dominio, `juntar_victimas` recibe detecciones de los
+dos y puede reportar cajas inexistentes: no correr esta prueba con otro
+`robot_real.launch.py` abierto en el mismo dominio.
 
 ## Renderizado de RViz
 

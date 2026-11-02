@@ -122,6 +122,22 @@ def remuestrear(particulas, pesos, rng=np.random):
     return nuevas
 
 
+def dispersar(particulas, desvio_xy, desvio_theta, rng=np.random):
+    """
+    Suma ruido chico a cada partícula después de remuestrear.
+
+    Con el robot quieto no hay ruido de movimiento y el remuestreo deja todas
+    las partículas copiadas de una sola; esto conserva la diversidad.
+    """
+    n = len(particulas)
+    nuevas = particulas.copy()
+    nuevas[:, 0] += rng.normal(0.0, desvio_xy, n)
+    nuevas[:, 1] += rng.normal(0.0, desvio_xy, n)
+    theta = nuevas[:, 2] + rng.normal(0.0, desvio_theta, n)
+    nuevas[:, 2] = np.arctan2(np.sin(theta), np.cos(theta))
+    return nuevas
+
+
 def estimar_pose(particulas):
     """Media de x/y y media circular de theta."""
     return (

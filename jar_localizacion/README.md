@@ -58,3 +58,14 @@ las paredes. Con 1.0 se pierde después de los primeros giros. Los valores está
 | `gamma1`..`gamma6` | 0.0025 | Varianzas del modelo de movimiento mecanum |
 | `escala_avance`, `escala_giro` | 1.0 | Corrección de escala de `/odom` |
 | `submuestreo_scan` | 15 | Se usa uno de cada N rayos para pesar |
+| `ruido_remuestreo_xy`, `ruido_remuestreo_theta` | 0.01 | Ruido (m, rad) después de remuestrear; 0 lo desactiva |
+
+### Por qué el ruido después de remuestrear
+
+Con el robot quieto, `mover_particulas` no agrega ruido (el desvío es
+proporcional al movimiento) y cada scan remuestrea: en pocos segundos las 300
+partículas son copias de una sola, con dispersión 0. El filtro queda
+sobreconfiado en la pose donde colapsó. En el bag de la semana 10, 10 corridas con
+semillas distintas reportan las víctimas con error medio de 6.9 cm (peor caso 18.1 cm)
+sin el ruido, y de 2.4 cm (peor 3.5 cm) con 1 cm / 0.01 rad. Corregir solo cuando
+el robot se movió, como AMCL, dio 6.2 cm de error medio (peor 14.8 cm).

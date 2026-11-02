@@ -18,7 +18,7 @@ from sensor_msgs.msg import LaserScan
 
 from tf2_ros import Buffer, TransformBroadcaster, TransformListener
 
-from jar_localizacion.filtro import (componer_poses, estimar_pose, invertir_pose,
+from jar_localizacion.filtro import (componer_poses, dispersar, estimar_pose, invertir_pose,
                                      mover_particulas, normalizar_angulo, pesar_particulas,
                                      remuestrear, sembrar_particulas)
 
@@ -69,6 +69,10 @@ class Localizador(Node):
         self.declare_parameter('escala_avance', 1.0)
         self.declare_parameter('escala_giro', 1.0)
         self.declare_parameter('submuestreo_scan', 15)
+        # Ruido después de remuestrear: sin él, con el robot quieto el filtro
+        # colapsa a una sola partícula (0 para desactivarlo).
+        self.declare_parameter('ruido_remuestreo_xy', 0.01)
+        self.declare_parameter('ruido_remuestreo_theta', 0.01)
 
         self.map_frame = self.get_parameter('map_frame').value
         self.odom_frame = self.get_parameter('odom_frame').value
@@ -80,6 +84,8 @@ class Localizador(Node):
         self.escala_avance = self.get_parameter('escala_avance').value
         self.escala_giro = self.get_parameter('escala_giro').value
         self.submuestreo_scan = max(1, self.get_parameter('submuestreo_scan').value)
+        self.ruido_xy = self.get_parameter('ruido_remuestreo_xy').value
+        self.ruido_theta = self.get_parameter('ruido_remuestreo_theta').value
 
         self.particulas = sembrar_particulas(
             self.get_parameter('pose_inicial_x').value,
@@ -166,7 +172,8 @@ class Localizador(Node):
         origen = self.info_mapa.origin.position
         pesos = pesar_particulas(self.particulas, puntos, self.campo,
                                  self.info_mapa.resolution, origen.x, origen.y)
-        self.particulas = remuestrear(self.particulas, pesos)
+        self.particulas = dispersar(remuestrear(self.particulas, pesos),
+                                    self.ruido_xy, self.ruido_theta)
         self.publicar_particulas()
 
         pose = estimar_pose(self.particulas)

@@ -25,6 +25,8 @@ localizador:
     # escala es positiva.
     escala_giro: 0.804
     submuestreo_scan: 15
+    ruido_remuestreo_xy: 0.01
+    ruido_remuestreo_theta: 0.01
 
 detector_scan_color:
   ros__parameters:

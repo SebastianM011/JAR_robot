@@ -4,9 +4,9 @@ import math
 
 import numpy as np
 
-from jar_localizacion.filtro import (campo_de_probabilidad, componer_poses, estimar_pose,
-                                     invertir_pose, mover_particulas, pesar_particulas,
-                                     remuestrear, sembrar_particulas)
+from jar_localizacion.filtro import (campo_de_probabilidad, componer_poses, dispersar,
+                                     estimar_pose, invertir_pose, mover_particulas,
+                                     pesar_particulas, remuestrear, sembrar_particulas)
 
 SIN_RUIDO = [0.0] * 6
 
@@ -78,3 +78,14 @@ def test_estimar_pose_circular():
     x, y, theta = estimar_pose(particulas)
     assert math.isclose(x, 1.0) and math.isclose(y, 2.0)
     assert abs(abs(theta) - math.pi) < 1e-9
+
+
+def test_dispersar_evita_el_colapso():
+    """Tras remuestrear con un solo peso, las partículas no quedan idénticas."""
+    particulas = sembrar_particulas(0.0, 0.0, math.pi, 0.3, 0.3, 200)
+    pesos = np.zeros(200)
+    pesos[0] = 1.0
+    nuevas = dispersar(remuestrear(particulas, pesos), 0.01, 0.01)
+    assert 0.005 < np.std(nuevas[:, 0]) < 0.02
+    assert np.all(np.abs(nuevas[:, 2]) <= math.pi)
+    assert np.allclose(dispersar(nuevas, 0.0, 0.0), nuevas)

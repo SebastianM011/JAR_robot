@@ -27,6 +27,8 @@ localizador:
     escala_avance: 1.0
     escala_giro: 1.0
     submuestreo_scan: 15
+    ruido_remuestreo_xy: 0.01
+    ruido_remuestreo_theta: 0.01
 
 map_server:
   ros__parameters:
