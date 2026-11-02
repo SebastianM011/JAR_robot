@@ -11,7 +11,8 @@ ros2 launch jar_bringup navegacion.launch.py
 ```
 
 El launch inicia Gazebo mediante el bringup de Yahboom, RViz con configuración propia, `map_server`,
-AMCL, `grilla_cobertura` y `explorador`. Usa `laberinto_simple.world` y su mapa.
+AMCL (o el filtro propio), `grilla_cobertura`, `explorador`, percepción y misión.
+Publica las víctimas confirmadas en `/victimas` sin abrir otro launch. Usa `laberinto_simple.world` y su mapa.
 AMCL usa el modelo omnidireccional del X3. No se inicia el controlador Nav2:
 el planificador y el movimiento son los implementados en `jar_exploracion`.
 
@@ -184,9 +185,14 @@ concreto que originó el atasco; las pruebas cinemáticas no simulan sus contact
 
 `porcentaje_objetivo` es el porcentaje de celdas libres de la grilla de cobertura
 que debe observar el láser para finalizar la misión. Paredes y desconocidos no
-entran en el denominador. Por defecto es **98%**. Al alcanzarlo, publica
-`terminado` en `/estado`, cancela la ruta pendiente, elimina camino y destino,
-y publica velocidad cero. `100` exige cobertura completa.
+entran en el denominador. Por defecto es **98%**. Al alcanzarlo, pasa a `regresando_al_origen` en `/estado` y planifica
+el regreso con A* y las mismas comprobaciones de mapa, huella y láser.
+El origen se guarda en coordenadas del mapa al iniciar la exploración, después
+del asentamiento de la primera pose confirmada; las correcciones posteriores
+de **2D Pose Estimate** conservan ese origen. Al quedar a 10 cm o menos del
+origen publica `terminado`, elimina camino y destino y publica velocidad cero.
+Si el regreso está bloqueado, frena y reintenta sin declarar éxito. El origen
+se conserva durante la ejecución del nodo; al reiniciarlo se guarda uno nuevo. `100` exige cobertura completa.
 
 ```bash
 ros2 launch jar_bringup navegacion.launch.py porcentaje_objetivo:=90
@@ -206,3 +212,23 @@ original y la cobertura no se modifican. La memoria de cada impacto dura ocho
 segundos desde su última observación; una corrección con **2D Pose Estimate**
 la descarta. El control predictivo sigue comprobando el scan antes de moverse.
 Si no existe paso con el margen requerido, no fuerza el paso.
+
+## Inicio integrado de percepción y misión
+
+`navegacion.launch.py` inicia por defecto `jar_percepcion` y `jar_mision`, además
+de simulación, localización, exploración y visualización. Se comparte un solo
+`detector_scan_color` y un solo `campo_verosimilitud`, también con AMCL.
+Para desactivar módulos usar `percepcion:=false` o `victimas:=false`.
+Si solo se desactiva percepción, misión inicia su propio detector de scan rojo.
+No iniciar además `percepcion.launch.py` o `victimas.launch.py` en otra terminal.
+
+```bash
+ros2 launch jar_bringup navegacion.launch.py \
+  world:=laberinto_simple_victimas.world localizador:=jar
+ros2 topic echo /victimas
+```
+
+`jar_navegacion` ofrece Nav2 y evasión como alternativas al explorador; no se
+inician juntos porque publican órdenes de movimiento sobre el mismo robot.
+Las herramientas de medición de odometría se ejecutan por separado; el nodo
+`odom_corregida` comparte salidas con el localizador y tampoco se inicia aquí.

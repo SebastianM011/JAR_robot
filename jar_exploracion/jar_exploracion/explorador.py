@@ -31,6 +31,7 @@ FRECUENCIA_HZ = 10.0
 
 ESTADO_INICIALIZANDO = 'inicializando'
 ESTADO_EXPLORANDO = 'explorando'
+ESTADO_REGRESANDO = 'regresando_al_origen'
 ESTADO_TERMINADO = 'terminado'
 ESTADO_SIN_DESTINOS = 'sin_destinos_transitables'
 ESTADO_DESLIZAMIENTO = 'bloqueado_deslizamiento'
@@ -123,6 +124,8 @@ class Explorador(Node):
             raise ValueError('suavizado debe estar entre 0 (excluido) y 1')
         self.vx_anterior = 0.0
         self.vy_anterior = 0.0
+        self.origen = None
+        self.regreso_pendiente = False
         self.pose_inicial_confirmada = False
         self.momento_confirmacion = None
 
@@ -343,7 +346,7 @@ class Explorador(Node):
                 f'Cobertura: {porcentaje:.1f}% / objetivo {self.porcentaje_objetivo:.1f}%.',
                 throttle_duration_sec=10.0)
         self.info_grilla = msg.info
-        if self.objetivo_celda is not None:
+        if self.objetivo_celda is not None and self.estado != ESTADO_REGRESANDO:
             f, c = self.objetivo_celda
             if not (0 <= f < alto and 0 <= c < ancho) or not self.no_cubiertas[f, c]:
                 self.get_logger().info(
@@ -399,7 +402,7 @@ class Explorador(Node):
 
     def verificar_movimiento(self, msg):
         """Usa la medición de Gazebo solo para detectar deslizamiento, sin publicar TF."""
-        if self.estado != ESTADO_EXPLORANDO:
+        if self.estado not in (ESTADO_EXPLORANDO, ESTADO_REGRESANDO):
             self.detector_deslizamiento.reiniciar()
             return
         pose = self.obtener_pose_robot()
@@ -890,7 +893,7 @@ class Explorador(Node):
         if self.estado == ESTADO_SIN_DESTINOS:
             if (self.no_cubiertas is not None and self.total_celdas_libres > 0
                     and not np.any(self.no_cubiertas)):
-                self.estado = ESTADO_TERMINADO
+                self.estado = ESTADO_REGRESANDO
             elif self.no_cubiertas is not None and any(
                     (int(f), int(c)) not in self.zonas_sin_destino
                     for f, c in zip(*np.where(self.no_cubiertas))):
@@ -908,7 +911,12 @@ class Explorador(Node):
                 ).nanoseconds / 1e9
 
                 if tiempo_transcurrido >= self.tiempo_asentamiento_s:
-                    self.estado = ESTADO_EXPLORANDO
+                    if self.origen is None:
+                        self.origen = tuple(pose[:2])
+                        self.get_logger().info(
+                            f'Origen guardado: ({self.origen[0]:.2f}, {self.origen[1]:.2f}) m.')
+                    self.estado = (ESTADO_REGRESANDO if self.regreso_pendiente
+                                   else ESTADO_EXPLORANDO)
 
         elif self.estado == ESTADO_EXPLORANDO:
 
@@ -917,7 +925,7 @@ class Explorador(Node):
                 and self.total_celdas_libres > 0
                 and not np.any(self.no_cubiertas)
             ):
-                self.estado = ESTADO_TERMINADO
+                self.estado = ESTADO_REGRESANDO
             elif self.no_cubiertas is not None and all(
                     (int(f), int(c)) in self.zonas_sin_destino
                     for f, c in zip(*np.where(self.no_cubiertas))):
@@ -930,10 +938,26 @@ class Explorador(Node):
         if self.estado in (ESTADO_EXPLORANDO, ESTADO_SIN_DESTINOS):
             porcentaje = self.porcentaje_cobertura()
             if porcentaje is not None and porcentaje + 1e-9 >= self.porcentaje_objetivo:
-                self.estado = ESTADO_TERMINADO
+                self.estado = ESTADO_REGRESANDO
                 self.get_logger().info(
                     f'Objetivo de cobertura alcanzado: {porcentaje:.1f}% '
                     f'>= {self.porcentaje_objetivo:.1f}%.')
+        if self.estado == ESTADO_REGRESANDO:
+            self.regreso_pendiente = True
+            if anterior != ESTADO_REGRESANDO:
+                if self.futuro_plan is not None:
+                    self.futuro_plan.cancel()
+                self.futuro_plan = None
+                self.clave_plan = None
+                self.camino = None
+                self.objetivo_celda = None
+                self.objetivo_mision = None
+                self.seguimiento_avance = None
+                self.publicar_camino([])
+                self.detener()
+            if (pose is not None and self.origen is not None
+                    and math.hypot(pose[0] - self.origen[0], pose[1] - self.origen[1]) <= 0.10):
+                self.estado = ESTADO_TERMINADO
         if self.estado != anterior:
             self.get_logger().info(
                 f'Transición: {anterior} -> {self.estado}'
@@ -951,66 +975,77 @@ class Explorador(Node):
             self.detener()
             return
         self.actualizar_obstaculos(pose, impactos)
-        fila_r_gruesa, col_r_gruesa = self.celda_de(x_r, y_r, self.info_grilla)
+        if self.estado == ESTADO_REGRESANDO:
+            if self.origen is None:
+                self.detener()
+                return
+            objetivo_grueso = (-1, -1)
+            objetivo_mundo = self.origen
+            ahora = self.get_clock().now().nanoseconds / 1e9
+            if ahora < self.objetivos_pendientes.get(objetivo_grueso, 0.0):
+                self.detener()
+                return
+        else:
+            fila_r_gruesa, col_r_gruesa = self.celda_de(x_r, y_r, self.info_grilla)
 
-        celda_robot = self.celda_fina_segura(x_r, y_r)
-        componente = self.componentes_libres[celda_robot] if celda_robot is not None else 0
-        preferidas = self.zonas_alcanzables(componente)
-        objetivo_grueso = self.objetivo_de_la_mision(
-            fila_r_gruesa, col_r_gruesa, preferidas)
-        if objetivo_grueso is None:
-            self.camino = None
-            self.seguimiento_avance = None
-            self.publicar_camino([])
-            self.get_logger().warn(
-                'Quedan celdas sin cubrir, pero todos los objetivos están en espera '
-                'de reintento por falta de camino o de avance.',
-                throttle_duration_sec=10.0)
-            self.detener()
-            return
-        objetivo_mundo = self.punto_seguro_en_zona(objetivo_grueso, componente)
-        if objetivo_mundo is not None:
             celda_robot = self.celda_fina_segura(x_r, y_r)
-            celda_objetivo = self.celda_fina_segura(*objetivo_mundo)
-            if (celda_robot is None or not self.libre_fino[celda_robot]
-                    or self.componentes_libres[celda_robot]
-                    != self.componentes_libres[celda_objetivo]):
-                objetivo_mundo = None
-        if objetivo_grueso in self.observaciones_fallidas:
-            objetivo_mundo = None
-        if objetivo_mundo is None:
-            celda_robot = self.celda_fina_segura(x_r, y_r)
-            if celda_robot is None or not self.libre_fino[celda_robot]:
+            componente = self.componentes_libres[celda_robot] if celda_robot is not None else 0
+            preferidas = self.zonas_alcanzables(componente)
+            objetivo_grueso = self.objetivo_de_la_mision(
+                fila_r_gruesa, col_r_gruesa, preferidas)
+            if objetivo_grueso is None:
+                self.camino = None
+                self.seguimiento_avance = None
+                self.publicar_camino([])
                 self.get_logger().warn(
-                    'No se buscan puntos de observación: posición del robot bloqueada.',
+                    'Quedan celdas sin cubrir, pero todos los objetivos están en espera '
+                    'de reintento por falta de camino o de avance.',
                     throttle_duration_sec=10.0)
-                self.camino = None
-                self.publicar_camino([])
                 self.detener()
                 return
-            if objetivo_grueso not in self.puntos_observacion:
-                self.detener()
-            objetivo_mundo = self.punto_para_observar(objetivo_grueso, x_r, y_r)
-            if self.busqueda_pendiente:
-                if self.ceder_turno_busqueda(objetivo_grueso):
+            objetivo_mundo = self.punto_seguro_en_zona(objetivo_grueso, componente)
+            if objetivo_mundo is not None:
+                celda_robot = self.celda_fina_segura(x_r, y_r)
+                celda_objetivo = self.celda_fina_segura(*objetivo_mundo)
+                if (celda_robot is None or not self.libre_fino[celda_robot]
+                        or self.componentes_libres[celda_robot]
+                        != self.componentes_libres[celda_objetivo]):
+                    objetivo_mundo = None
+            if objetivo_grueso in self.observaciones_fallidas:
+                objetivo_mundo = None
+            if objetivo_mundo is None:
+                celda_robot = self.celda_fina_segura(x_r, y_r)
+                if celda_robot is None or not self.libre_fino[celda_robot]:
+                    self.get_logger().warn(
+                        'No se buscan puntos de observación: posición del robot bloqueada.',
+                        throttle_duration_sec=10.0)
+                    self.camino = None
+                    self.publicar_camino([])
+                    self.detener()
+                    return
+                if objetivo_grueso not in self.puntos_observacion:
+                    self.detener()
+                objetivo_mundo = self.punto_para_observar(objetivo_grueso, x_r, y_r)
+                if self.busqueda_pendiente:
+                    if self.ceder_turno_busqueda(objetivo_grueso):
+                        self.get_logger().info(
+                            f'Búsqueda de {objetivo_grueso} cede el turno a otras zonas; '
+                            'se conserva el progreso de búsqueda.')
                     self.get_logger().info(
-                        f'Búsqueda de {objetivo_grueso} cede el turno a otras zonas; '
-                        'se conserva el progreso de búsqueda.')
-                self.get_logger().info(
-                    f'Buscando punto de observación para {objetivo_grueso} por etapas.',
-                    throttle_duration_sec=10.0)
+                        f'Buscando punto de observación para {objetivo_grueso} por etapas.',
+                        throttle_duration_sec=10.0)
+                    self.camino = None
+                    self.publicar_camino([])
+                    return
+            if objetivo_mundo is None:
+                self.zonas_sin_destino.add(objetivo_grueso)
+                self.get_logger().warn(
+                    f'Zona {objetivo_grueso} sin punto de observación alcanzable y visible; '
+                    'se excluye como destino hasta actualizar el mapa. Sigue sin cubrir.')
                 self.camino = None
                 self.publicar_camino([])
+                self.detener()
                 return
-        if objetivo_mundo is None:
-            self.zonas_sin_destino.add(objetivo_grueso)
-            self.get_logger().warn(
-                f'Zona {objetivo_grueso} sin punto de observación alcanzable y visible; '
-                'se excluye como destino hasta actualizar el mapa. Sigue sin cubrir.')
-            self.camino = None
-            self.publicar_camino([])
-            self.detener()
-            return
         self.publicar_objetivo(objetivo_mundo)
 
         self.replanificar_si_hace_falta(objetivo_grueso, objetivo_mundo, x_r, y_r)
@@ -1027,12 +1062,13 @@ class Explorador(Node):
         if self.objetivo_sin_avance(objetivo_grueso, x_r, y_r, distancia_restante):
             self.get_logger().warn(
                 f'Objetivo {objetivo_grueso} sin avance durante '
-                f'{self.timeout_sin_avance_s:.0f} s; se probará otro objetivo. '
-                'La zona sigue pendiente de cobertura.')
+                f'{self.timeout_sin_avance_s:.0f} s; se reintentará la planificación. '
+                'Se recalculará el camino.')
             self.objetivos_pendientes[objetivo_grueso] = (
                 self.get_clock().now().nanoseconds / 1e9 + self.reintento_objetivo_s)
-            self.observaciones_fallidas.setdefault(objetivo_grueso, []).append(objetivo_mundo)
-            self.puntos_observacion.pop(objetivo_grueso, None)
+            if self.estado != ESTADO_REGRESANDO:
+                self.observaciones_fallidas.setdefault(objetivo_grueso, []).append(objetivo_mundo)
+                self.puntos_observacion.pop(objetivo_grueso, None)
             self.seguimiento_avance = None
             self.camino = None
             self.publicar_camino([])

@@ -2,6 +2,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -20,6 +21,8 @@ def generate_launch_description():
 
     arguments = [
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('iniciar_detector_scan', default_value='true',
+                              description='false si percepción ya publica /scan_rojo'),
         DeclareLaunchArgument('params_file', default_value=PathJoinSubstitution([
             FindPackageShare('jar_mision'), 'config', 'mision.yaml'])),
     ]
@@ -27,7 +30,8 @@ def generate_launch_description():
               {'use_sim_time': ParameterValue(config('use_sim_time'), value_type=bool)}]
     return LaunchDescription(arguments + [
         Node(package='jar_percepcion', executable='detector_scan',
-             name='detector_scan_color', output='screen', parameters=params),
+             name='detector_scan_color', output='screen', parameters=params,
+             condition=IfCondition(config('iniciar_detector_scan'))),
         Node(package='jar_percepcion', executable='detector_obstaculos',
              name='detector_victimas', output='screen', parameters=params,
              remappings=[('scan', 'scan_rojo'),

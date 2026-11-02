@@ -211,7 +211,7 @@ def test_termina_segun_porcentaje_sin_contar_paredes(nodo, cubiertas, termina):
     n.recibir_grilla(cobertura)
     assert n.porcentaje_cobertura() == cubiertas
     n.transicionar((0.5, 0.5, 0.0))
-    assert (n.estado == explorador.ESTADO_TERMINADO) == termina
+    assert (n.estado == explorador.ESTADO_REGRESANDO) == termina
 
 
 def test_100_por_ciento_opcional_y_grilla_sin_libres(nodo):
@@ -239,6 +239,7 @@ def test_umbral_cancela_camino_y_frena(nodo, monkeypatch):
     n.recibir_grilla(cobertura)
     n.camino = [(10, 10), (10, 11)]
     n.objetivo_mision = (1, 1)
+    n.origen = (0.5, 0.5)
     n.futuro_plan = Future()
     pendiente = n.futuro_plan
     monkeypatch.setattr(n, 'obtener_pose_robot', lambda: (0.5, 0.5, 0.0))
@@ -304,3 +305,73 @@ def test_impactos_rotados_y_pose_corregida_descarta_obstaculos(nodo):
     n.actualizar_obstaculos((0.5, 0.5, 0.), np.empty((0, 2)))
     assert not n.obstaculos_temporales
     assert n.datos_planificacion[celda] == 0
+
+
+def test_guarda_origen_al_iniciar_y_lo_conserva_al_corregir_pose(nodo):
+    """El origen es la pose asentada de salida, no una corrección durante la misión."""
+    n, _, reloj = nodo
+    n.recibir_mapa(mapa())
+    n.recibir_grilla(mapa())
+    msg = PoseWithCovarianceStamped()
+    msg.header.frame_id = 'map'
+    n.recibir_pose_inicial(msg)
+    n.transicionar((0.4, 0.4, 0.0))
+    assert n.origen is None
+    reloj.now.return_value = Time(seconds=104, clock_type=ClockType.ROS_TIME)
+    n.transicionar((0.5, 0.5, 0.0))
+    assert n.origen == (0.5, 0.5)
+    n.recibir_pose_inicial(msg)
+    reloj.now.return_value = Time(seconds=108, clock_type=ClockType.ROS_TIME)
+    n.transicionar((0.7, 0.7, 0.0))
+    assert n.origen == (0.5, 0.5)
+
+
+def test_regresa_antes_de_terminar_y_no_cambia_por_cobertura(nodo):
+    """Completar cobertura lejos del origen inicia regreso y solo llegar termina."""
+    n, _, _ = nodo
+    n.recibir_mapa(mapa())
+    n.origen = (0.3, 0.3)
+    n.estado = explorador.ESTADO_EXPLORANDO
+    n.recibir_grilla(mapa())
+    n.transicionar((0.7, 0.7, 0.0))
+    assert n.estado == explorador.ESTADO_REGRESANDO
+    n.objetivo_celda = (-1, -1)
+    n.camino = [(15, 15), (12, 12)]
+    n.recibir_grilla(mapa())
+    assert n.camino is not None
+    n.transicionar(None)
+    assert n.estado == explorador.ESTADO_REGRESANDO
+    n.transicionar((0.35, 0.3, 0.0))
+    assert n.estado == explorador.ESTADO_TERMINADO
+
+
+def test_regreso_controla_hacia_origen_con_scan_valido(nodo):
+    """El regreso usa A* y publica movimiento hacia el origen guardado."""
+    from sensor_msgs.msg import LaserScan
+
+    n, buffer, _ = nodo
+    n.recibir_mapa(mapa())
+    n.recibir_grilla(mapa())
+    n.estado = explorador.ESTADO_REGRESANDO
+    n.origen = (0.3, 0.5)
+    scan = LaserScan()
+    scan.header.frame_id = 'laser'
+    scan.header.stamp = Time(seconds=100).to_msg()
+    scan.range_min = 0.05
+    scan.range_max = 10.0
+    scan.angle_increment = 0.1
+    scan.ranges = [float('inf')] * 20
+    n.recibir_scan(scan)
+    tf = TransformStamped()
+    tf.transform.rotation.w = 1.0
+    buffer.lookup_transform_full.return_value = tf
+    n.actuar((0.7, 0.5, 0.0))
+    if n.futuro_plan is not None:
+        n.futuro_plan.result(timeout=5)
+        n.actuar((0.7, 0.5, 0.0))
+    assert n.pub_cmd_vel.publish.call_args.args[0].linear.x < 0.0
+    scan.ranges = [float('nan')] * 20
+    n.recibir_scan(scan)
+    n.actuar((0.7, 0.5, 0.0))
+    cmd = n.pub_cmd_vel.publish.call_args.args[0]
+    assert cmd.linear.x == cmd.linear.y == 0.0

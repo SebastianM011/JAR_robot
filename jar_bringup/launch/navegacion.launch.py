@@ -1,7 +1,7 @@
 """Inicia la navegación propia y sus proveedores opcionales."""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -25,6 +25,8 @@ def generate_launch_description():
         DeclareLaunchArgument('localizador', default_value='amcl', choices=['amcl', 'jar'],
                               description='AMCL de Nav2 o el filtro de jar_localizacion'),
         DeclareLaunchArgument('exploracion', default_value='true'),
+        DeclareLaunchArgument('percepcion', default_value='true'),
+        DeclareLaunchArgument('victimas', default_value='true'),
         DeclareLaunchArgument('porcentaje_objetivo', default_value='98.0',
                               description='Porcentaje de celdas libres cubiertas para terminar'),
         DeclareLaunchArgument('use_sim_time', default_value=config('simulacion')),
@@ -82,12 +84,33 @@ def generate_launch_description():
              output='screen', condition=localizador_es('jar'),
              parameters=[clock, {'yaml_filename': config('map')}]),
         Node(package='jar_localizacion', executable='campo_verosimilitud',
-             name='campo_verosimilitud', output='screen', condition=localizador_es('jar'),
+             name='campo_verosimilitud', output='screen',
+             condition=IfCondition(PythonExpression([
+                 "('", config('localizacion'), "' == 'true' and '",
+                 config('localizador'), "' == 'jar') or '",
+                 config('percepcion'), "' == 'true' or '", config('victimas'), "' == 'true'"])),
              parameters=[config('params_file'), clock]),
         Node(package='jar_localizacion', executable='localizador', name='localizador',
              output='screen', condition=localizador_es('jar'),
              parameters=[config('params_file'), clock]),
     ]
+    # Cada include conserva sus parámetros en un ámbito propio.
+    perception = GroupAction(actions=[IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(share('jar_percepcion', 'launch', 'percepcion.launch.py')),
+        condition=IfCondition(config('percepcion')),
+        launch_arguments={
+            'use_sim_time': config('use_sim_time'),
+            'params_file': share('jar_percepcion', 'config', 'percepcion.yaml'),
+        }.items())])
+    mission = GroupAction(actions=[IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(share('jar_mision', 'launch', 'victimas.launch.py')),
+        condition=IfCondition(config('victimas')),
+        launch_arguments={
+            'use_sim_time': config('use_sim_time'),
+            'params_file': share('jar_mision', 'config', 'mision.yaml'),
+            'iniciar_detector_scan': PythonExpression([
+                "'false' if '", config('percepcion'), "' == 'true' else 'true'"]),
+        }.items())])
     coverage = Node(
         package='jar_exploracion', executable='grilla_cobertura',
         name='grilla_cobertura', output='screen', parameters=[config('params_file'), clock])
@@ -114,4 +137,5 @@ def generate_launch_description():
     # Resolver nuestro RViz antes de que el include establezca rviz=false.
     # El simulador necesita conservar sus configuraciones para OnProcessExit.
     return LaunchDescription(
-        arguments + [visualizador, rviz, simulation] + localization_nodes + [coverage, explorer])
+        arguments + [visualizador, rviz, simulation] + localization_nodes
+        + [perception, mission, coverage, explorer])

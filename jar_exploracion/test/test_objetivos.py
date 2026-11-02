@@ -77,6 +77,10 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.zonas_sin_destino.clear()
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_EXPLORANDO
+    nodo.origen = (0., 0.)
+    nodo.futuro_plan = None
+    nodo.publicar_camino = Mock()
+    nodo.detener = Mock()
     nodo.no_cubiertas[:] = False
     nodo.total_celdas_libres = nodo.celdas_cubiertas = 1
     nodo.transicionar((0., 0., 0.))
