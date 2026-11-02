@@ -442,3 +442,28 @@ def test_mirada_no_consume_el_timeout_sin_avance(nodo):
     n.seguimiento_avance = ((3, 3), 0.5, 0.5, 0.0, 1.0)
     assert n.mirar_alrededor((0.5, 0.5, 0.0))
     assert n.seguimiento_avance is None
+
+
+def test_impactos_junto_a_pared_conocida_no_son_obstaculos(nodo):
+    """La pared vista con error de localización no engorda; una caja lejos sí se marca."""
+    n = preparar_mirada(nodo)
+    n.ultimo_scan = object()
+    pose = (0.5, 0.5, 0.0)
+    # Desde (0.5, 0.5): un impacto a 6 cm de la pared del borde y otro en el medio.
+    n.actualizar_obstaculos(pose, [(-0.39, 0.0), (0.2, 0.0)])
+    marcadas = [n.celda_a_mundo(f, c, n.info_mapa) for f, c in n.obstaculos_temporales]
+    assert len(marcadas) == 1
+    x, y = marcadas[0]
+    assert abs(x - 0.7) < 0.05 and abs(y - 0.5) < 0.05
+
+
+def test_obstaculos_del_scan_usan_margen_menor(nodo):
+    """Una caja cerca del robot bloquea menos que si tuviera el margen de las paredes."""
+    n = preparar_mirada(nodo)
+    datos = n.datos_mapa.copy()
+    fila, col = n.celda_de(0.5, 0.5, n.info_mapa)
+    datos[fila - 1:fila + 2, col - 1:col + 2] = 100
+    con_margen_scan = n.espacio_libre(datos, 0.0).sum()
+    n.margen_obstaculos_scan = n.margen_seguridad
+    con_margen_pared = n.espacio_libre(datos, 0.0).sum()
+    assert con_margen_scan > con_margen_pared

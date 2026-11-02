@@ -80,6 +80,12 @@ class Explorador(Node):
         self.declare_parameter('pasos_mirada', 8)
         self.declare_parameter('pausa_mirada_s', 0.6)
         self.declare_parameter('velocidad_mirada', 0.6)
+        # Impactos del scan a menos de esto de una pared del mapa son esa pared
+        # vista con error de localización, no un obstáculo nuevo.
+        self.declare_parameter('distancia_pared_conocida', 0.10)
+        # Margen para obstáculos que solo ve el scan (cajas). Las paredes del mapa,
+        # dibujadas más gruesas que las reales, conservan margen_seguridad.
+        self.declare_parameter('margen_obstaculos_scan', 0.02)
 
         self.largo_robot = self.get_parameter('largo_robot').value
         self.ancho_robot = self.get_parameter('ancho_robot').value
@@ -133,6 +139,11 @@ class Explorador(Node):
         self.origen = None
         self.regreso_pendiente = False
         self.distancia_entre_miradas = self.get_parameter('distancia_entre_miradas').value
+        self.distancia_pared_conocida = self.get_parameter('distancia_pared_conocida').value
+        self.margen_obstaculos_scan = self.get_parameter('margen_obstaculos_scan').value
+        if self.distancia_pared_conocida < 0 or self.margen_obstaculos_scan < 0:
+            raise ValueError(
+                'distancia_pared_conocida y margen_obstaculos_scan no pueden ser negativos')
         self.mirada = MiradaPorPasos(
             pasos=self.get_parameter('pasos_mirada').value,
             pausa_s=self.get_parameter('pausa_mirada_s').value,
@@ -267,16 +278,31 @@ class Explorador(Node):
         self.publicar_camino([])
         self.detener()
 
+    def espacio_libre(self, datos, yaw_mapa):
+        """
+        Espacio de configuraciones para la huella con orientación `yaw_mapa`.
+
+        Las celdas del mapa usan margen_seguridad; las que solo marcó el scan,
+        margen_obstaculos_scan.
+        """
+        libres = espacio_transitable(
+            self.datos_mapa, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
+            self.margen_seguridad + 0.006, yaw_mapa)
+        temporales = (datos != 0) & (self.datos_mapa == 0)
+        if not temporales.any():
+            return libres
+        return libres & espacio_transitable(
+            np.where(temporales, 100, 0), self.info_mapa.resolution, self.largo_robot,
+            self.ancho_robot, self.margen_obstaculos_scan + 0.006, yaw_mapa)
+
     def actualizar_orientacion_huella(self, yaw):
         """Recalcula el espacio libre si cambia significativamente la orientación."""
         diferencia = math.atan2(math.sin(yaw - self.yaw_huella), math.cos(yaw - self.yaw_huella))
         if abs(diferencia) < 0.03:
             return
         self.yaw_huella = yaw
-        self.libre_fino = espacio_transitable(
-            self.datos_planificacion, self.info_mapa.resolution,
-            self.largo_robot, self.ancho_robot,
-            self.margen_seguridad + 0.006,
+        self.libre_fino = self.espacio_libre(
+            self.datos_planificacion,
             yaw - yaw_de_quaternion(self.info_mapa.origin.orientation))
         self.componentes_libres, _ = nd.label(self.libre_fino)
         for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
@@ -301,7 +327,8 @@ class Explorador(Node):
                 fila, col = self.celda_de(x + c * bx - s * by,
                                           y + s * bx + c * by, self.info_mapa)
                 if (0 <= fila < alto and 0 <= col < ancho
-                        and self.datos_mapa[fila, col] == 0):
+                        and self.datos_mapa[fila, col] == 0
+                        and self.distancia_a_pared[fila, col] > self.distancia_pared_conocida):
                     self.obstaculos_temporales[fila, col] = ahora
             self.scan_integrado = self.ultimo_scan
         datos = self.datos_mapa.copy()
@@ -310,10 +337,8 @@ class Explorador(Node):
         if np.array_equal(datos, self.datos_planificacion):
             return
         self.datos_planificacion = datos
-        libres = espacio_transitable(
-            datos, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
-            self.margen_seguridad + 0.006,
-            self.yaw_huella - yaw_de_quaternion(self.info_mapa.origin.orientation))
+        libres = self.espacio_libre(
+            datos, self.yaw_huella - yaw_de_quaternion(self.info_mapa.origin.orientation))
         if np.array_equal(libres, self.libre_fino):
             return
         self.libre_fino = libres

@@ -229,6 +229,24 @@ más amplio. Termina alineado con la orientación inicial, así que no invalida 
 camino planificado, y el tiempo girando no cuenta para `timeout_sin_avance_s`.
 `distancia_entre_miradas: 0` lo desactiva.
 
+## Obstáculos que no están en el mapa
+
+El explorador marca como obstáculo temporal (8 s) cada impacto del scan en una celda
+que el mapa dice libre. En `maze_1_6x5` eso dejaba al robot encerrado junto a la
+caja azul: con 4 cm de error de localización, los impactos de las paredes caían en
+celdas libres y las engordaban, y la caja, inflada con el mismo margen de 5 cm que
+las paredes, dejaba un paso de 2 cm entre ella y la punta de una pared.
+
+- Los impactos a menos de `distancia_pared_conocida` (10 cm) de una pared del mapa
+  se ignoran: son esa pared vista con error, no un obstáculo nuevo.
+- Los obstáculos que solo ve el scan se inflan con `margen_obstaculos_scan` (2 cm).
+  Las paredes del mapa, dibujadas más gruesas que las reales, mantienen
+  `margen_seguridad`. El frenado sigue comprobando la huella contra el scan.
+
+Con un scan simulado sobre la geometría real del mundo, el robot queda encerrado
+en 7 de 8 errores de pose de hasta 8 cm sin estos cambios, y en 3 de 8 con ellos
+(solo con 6 a 8 cm de error hacia la pared).
+
 ## Reporte de víctimas al final
 
 `juntar_victimas` (`modo_reporte: al_final`) no reporta mientras explora: cuando

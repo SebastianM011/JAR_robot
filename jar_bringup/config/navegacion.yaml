@@ -66,3 +66,8 @@ explorador:
     pasos_mirada: 8
     pausa_mirada_s: 0.6
     velocidad_mirada: 0.6
+    # Obstáculos del scan: se ignoran a menos de 10 cm de una pared del mapa
+    # (es la pared vista con error de localización) y se inflan con 2 cm de
+    # margen en vez de margen_seguridad. Ver README.
+    distancia_pared_conocida: 0.10
+    margen_obstaculos_scan: 0.02
