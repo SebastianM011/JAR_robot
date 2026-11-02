@@ -1,0 +1,17 @@
+# Salidas de colcon: se compila desde ~/rosmaster_ws, no dentro del repo.
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Editores y sistema
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
