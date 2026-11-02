@@ -21,6 +21,8 @@ def generate_launch_description():
 
     arguments = [
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('cantidad_victimas', default_value='2',
+                              description='Reportes que acepta la prueba: cajas rojas'),
         DeclareLaunchArgument('iniciar_detector_scan', default_value='true',
                               description='false si percepción ya publica /scan_rojo'),
         DeclareLaunchArgument('params_file', default_value=PathJoinSubstitution([
@@ -39,5 +41,6 @@ def generate_launch_description():
                          ('objetos_no_mapeados', 'objetos_rojos'),
                          ('objetos_no_mapeados_markers', 'objetos_rojos_markers')]),
         Node(package='jar_mision', executable='juntar_victimas',
-             name='juntar_victimas', output='screen', parameters=params),
+             name='juntar_victimas', output='screen', parameters=params + [{
+                 'victimas': ParameterValue(config('cantidad_victimas'), value_type=int)}]),
     ])

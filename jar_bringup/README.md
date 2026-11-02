@@ -239,6 +239,27 @@ Si sobran reportes, también usa grupos con al menos `detecciones_minimas_final`
 (10): un reporte errado no resta puntos. Para forzar el reporte:
 `ros2 topic pub --once /reportar_victimas std_msgs/msg/Empty`.
 
+## Mundos con víctimas
+
+Cambiar siempre `world` y `map` juntos, y `cantidad_victimas` según las cajas rojas
+del mundo. Todos los mapas tienen libre el punto de partida (0, 0).
+
+| Mundo (`<nombre>_victimas.world`) | Rojas | Distractores |
+| --- | --- | --- |
+| `laberinto_simple` | 2 | 1 |
+| `maze_1_6x5` | 2 | 2 |
+| `maze_4_metal_6x6` | 2 | 2 |
+| `maze_2_6x5` | 3 | 2 |
+| `maze_3_6x6` | 3 | 2 |
+| `laberinto_1` | 3 | 1 |
+
+```bash
+M=maze_1_6x5
+ros2 launch jar_bringup navegacion.launch.py localizador:=jar cantidad_victimas:=2 \
+  world:=${M}_victimas.world \
+  map:=$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)/maps/${M}.yaml
+```
+
 ## Inicio integrado de percepción y misión
 
 `navegacion.launch.py` inicia por defecto `jar_percepcion` y `jar_mision`, además

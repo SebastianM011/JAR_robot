@@ -27,6 +27,8 @@ def generate_launch_description():
         DeclareLaunchArgument('exploracion', default_value='true'),
         DeclareLaunchArgument('percepcion', default_value='true'),
         DeclareLaunchArgument('victimas', default_value='true'),
+        DeclareLaunchArgument('cantidad_victimas', default_value='2',
+                              description='Reportes que acepta la prueba: cajas rojas'),
         DeclareLaunchArgument('porcentaje_objetivo', default_value='98.0',
                               description='Porcentaje de celdas libres cubiertas para terminar'),
         DeclareLaunchArgument('use_sim_time', default_value=config('simulacion')),
@@ -108,6 +110,7 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': config('use_sim_time'),
             'params_file': share('jar_mision', 'config', 'mision.yaml'),
+            'cantidad_victimas': config('cantidad_victimas'),
             'iniciar_detector_scan': PythonExpression([
                 "'false' if '", config('percepcion'), "' == 'true' else 'true'"]),
         }.items())])
