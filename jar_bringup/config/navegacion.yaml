@@ -82,6 +82,6 @@ explorador:
     # tira impactos sueltos que no se repiten en el mismo lugar.
     impactos_minimos_scan: 3
     # Si queda dentro del margen de una pared, se aleja despacio hasta la
-    # celda libre más cercana (hasta 20 cm) en vez de quedarse detenido.
-    radio_escape: 0.20
+    # celda libre más cercana (hasta 35 cm) en vez de quedarse detenido.
+    radio_escape: 0.35
     velocidad_escape: 0.06
