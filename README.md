@@ -14,6 +14,7 @@ las cajas rojas. ROS 2 Humble, paquetes `ament_python`.
 | `jar_percepcion` | Detección de rojo con cámara y lidar (`/scan_rojo`) y de obstáculos que no están en el mapa |
 | `jar_mision` | Agrupa las detecciones rojas y publica una posición por caja en `/victimas` |
 | `jar_navegacion` | Alternativas al explorador: Nav2 configurado y un evasor reactivo |
+| `jar_reloj` | Reenvía `/clock` de Gazebo a 100 Hz para que los nodos de Python no gasten CPU en recibirlo |
 
 Buena parte del código parte de los workshops de
 [`jar_workshops`](https://github.com/AIRclub-UdeSA/jar_workshops); la teoría de cada

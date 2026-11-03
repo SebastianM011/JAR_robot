@@ -31,6 +31,7 @@ setup(
     entry_points={
         'console_scripts': [
             'visualizador_grillas = jar_bringup.visualizador_grillas:main',
+            'activar_controladores = jar_bringup.activar_controladores:main',
         ],
     },
 )

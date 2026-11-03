@@ -5,7 +5,7 @@ from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDesc
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetRemap
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
@@ -53,6 +53,9 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file', default_value=share(
             'jar_bringup', 'config', 'navegacion.yaml')),
         DeclareLaunchArgument('cmd_vel_topic', default_value='cmd_vel'),
+        DeclareLaunchArgument('reloj_lento_hz', default_value='100.0',
+                              description='Frecuencia de /clock para nuestros nodos; 0 usa '
+                                          'el /clock de Gazebo (1000 Hz)'),
     ]
     simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(share(
@@ -140,8 +143,27 @@ def generate_launch_description():
     visualizador = Node(
         package='jar_bringup', executable='visualizador_grillas',
         output='screen', condition=IfCondition(config('rviz')), parameters=[clock])
+    # Gazebo publica /clock a 1000 Hz y cada nodo de Python con use_sim_time
+    # gasta ~40 % de un núcleo solo en recibirlo. reloj_lento lo reenvía a
+    # reloj_lento_hz y nuestros nodos escuchan esa copia; Gazebo y sus
+    # puentes quedan fuera del grupo y siguen con el /clock original.
+    usar_reloj_lento = IfCondition(PythonExpression([
+        "'", config('simulacion'), "' == 'true' and float('", config('reloj_lento_hz'),
+        "') > 0"]))
+    reloj_lento = Node(
+        package='jar_reloj', executable='reloj_lento', name='reloj_lento', output='screen',
+        condition=usar_reloj_lento,
+        parameters=[{'frecuencia_hz': ParameterValue(config('reloj_lento_hz'),
+                                                     value_type=float)}])
+    # El spawner del simulador se rinde a los 30 s y Gazebo puede tardar más
+    # en atender al controller_manager: este nodo reintenta hasta activarlo.
+    controladores = Node(
+        package='jar_bringup', executable='activar_controladores',
+        name='activar_controladores', output='screen',
+        condition=IfCondition(config('simulacion')))
+    nuestros = GroupAction(
+        [SetRemap(src='/clock', dst='/clock_lento', condition=usar_reloj_lento),
+         visualizador, rviz] + localization_nodes + [perception, mission, coverage, explorer])
     # Resolver nuestro RViz antes de que el include establezca rviz=false.
     # El simulador necesita conservar sus configuraciones para OnProcessExit.
-    return LaunchDescription(
-        arguments + [visualizador, rviz, simulation] + localization_nodes
-        + [perception, mission, coverage, explorer])
+    return LaunchDescription(arguments + [reloj_lento, controladores, nuestros, simulation])

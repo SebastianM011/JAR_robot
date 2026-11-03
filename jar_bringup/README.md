@@ -249,6 +249,35 @@ Con un scan simulado sobre la geometría real del mundo, el robot queda encerrad
 en 7 de 8 errores de pose de hasta 8 cm sin estos cambios, y en 3 de 8 con ellos
 (solo con 6 a 8 cm de error hacia la pared).
 
+### Robot dentro del margen de una pared
+
+Si el centro del robot cae en una celda que el espacio de configuraciones no
+admite (rozó el margen en un paso angosto, o la localización lo corrió unos
+centímetros), antes el explorador se detenía para siempre con "posición del robot
+bloqueada". Ahora se aleja a `velocidad_escape` (6 cm/s) hacia la celda libre más
+cercana dentro de `radio_escape` (20 cm), salvo que ese paso acerque el chasis a un
+impacto del scan. En la simulación `margen_seguridad` bajó de 5 a 3 cm: las paredes
+de los mapas miden 10 cm y las de los mundos 2 cm, así que el mapa ya deja 4 cm de
+más por lado.
+
+## Rendimiento de la simulación
+
+- **`/clock` lento.** Gazebo publica `/clock` en cada paso de física (1000 Hz) y un
+  nodo de Python con `use_sim_time`, aunque no haga nada, gasta ~38 % de un núcleo
+  solo en recibirlo. `jar_reloj/reloj_lento` (C++) lo reenvía a `reloj_lento_hz`
+  (100 Hz, sobra para temporizadores de 10 Hz) en `/clock_lento`, y el launch remapea
+  ahí todos nuestros nodos. Gazebo y sus puentes siguen con el `/clock` original.
+  `reloj_lento_hz:=0` vuelve al comportamiento anterior.
+- **Controladores.** Al arrancar, Gazebo puede tardar cerca de un minuto en
+  inicializar los sensores con render y el `controller_manager` no contesta: el
+  `spawner` del simulador se rinde a los 30 s ("Switch controller timed out" o
+  "Failed getting a result ... load_controller") y sin `joint_state_broadcaster` no
+  hay `/odom`. `activar_controladores` reintenta con esperas de 90 s y termina
+  cuando queda activo. El error del `spawner` puede seguir apareciendo en el log;
+  lo que importa es la línea "Controladores activos".
+- **Sin ventana de Gazebo.** `gui:=false` ahorra la interfaz de Gazebo; RViz alcanza
+  para seguir la corrida.
+
 ## Reporte de víctimas al final
 
 `juntar_victimas` (`modo_reporte: al_final`) no reporta mientras explora: cuando
