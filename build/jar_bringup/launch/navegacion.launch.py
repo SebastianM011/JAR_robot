@@ -1,1 +1,0 @@
-/home/sebastian/jar_ws/src/jar_robot/jar_bringup/launch/navegacion.launch.py

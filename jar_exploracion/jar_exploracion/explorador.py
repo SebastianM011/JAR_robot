@@ -54,6 +54,7 @@ class Explorador(Node):
         super().__init__('explorador')
 
         self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('confirmar_pose_automatica', False)
         self.declare_parameter('base_frame', 'base_footprint')
         self.declare_parameter('velocidad_maxima', 0.3)
         self.declare_parameter('ganancia_atractiva', 0.6)
@@ -99,6 +100,8 @@ class Explorador(Node):
         # un waypoint a otro.
         self.suavizado = self.get_parameter('suavizado').value
         self.tiempo_asentamiento_s = self.get_parameter('tiempo_asentamiento_s').value
+
+        self.confirmar_pose_automatica = self.get_parameter('confirmar_pose_automatica').value
         self.margen_seguridad = self.get_parameter('margen_seguridad').value
         self.sigma_costo = self.get_parameter('sigma_costo').value
         self.timeout_scan_s = self.get_parameter('timeout_scan_s').value
@@ -180,6 +183,12 @@ class Explorador(Node):
         self.pub_camino = self.create_publisher(Path, 'camino_planificado', 10)
         self.pub_estado = self.create_publisher(String, 'estado', 10)
         self.pub_porcentaje = self.create_publisher(Float32, 'porcentaje_cobertura', 10)
+        # Modo competencia: el robot manda solo el mismo mensaje que el
+        # "2D Pose Estimate" de RViz, cuando ya está todo cargado.
+        self.pub_pose_inicial = self.create_publisher(
+            PoseWithCovarianceStamped, 'initialpose', 10)
+        self.pose_auto_enviada = False
+        self.momento_primer_scan = None
         if self.get_parameter('verificar_movimiento_simulado').value:
             self.create_subscription(
                 Odometry, '/ground_truth/odom', self.verificar_movimiento,
@@ -359,6 +368,8 @@ class Explorador(Node):
     def recibir_scan(self, msg: LaserScan):
         self.ultimo_scan = msg
         self.momento_scan = self.get_clock().now()
+        if self.momento_primer_scan is None:
+            self.momento_primer_scan = self.get_clock().now()
 
     def recibir_pose_inicial(self, msg: PoseWithCovarianceStamped):
         # Reinicia el asentamiento cada vez (incluso si ya se había
@@ -1119,7 +1130,19 @@ class Explorador(Node):
 
     def controlar(self):
         pose = self.obtener_pose_robot()
-
+        # Modo competencia: cuando hay mapa y el LiDAR lleva 5 s andando,
+        # "hacemos el clic" de 2D Pose Estimate en el origen, una sola vez.
+        if (self.confirmar_pose_automatica and not self.pose_auto_enviada
+                and self.libre_fino is not None
+                and self.momento_primer_scan is not None
+                and (self.get_clock().now() - self.momento_primer_scan).nanoseconds / 1e9 >= 5.0):
+            clic = PoseWithCovarianceStamped()
+            clic.header.frame_id = self.map_frame
+            clic.header.stamp = self.get_clock().now().to_msg()
+            clic.pose.pose.orientation.w = 1.0   # mirando hacia +x
+            self.pub_pose_inicial.publish(clic)
+            self.pose_auto_enviada = True
+            self.get_logger().info('Todo cargado: mando la pose inicial (0, 0, 0) como el clic de RViz.')
         if pose is not None and self.info_mapa is not None:
             self.actualizar_orientacion_huella(pose[2])
         estado_anterior = self.estado
