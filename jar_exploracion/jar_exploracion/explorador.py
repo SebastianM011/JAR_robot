@@ -30,6 +30,8 @@ from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espac
                                        puntos_scan, regular_traslacion)
 
 FRECUENCIA_HZ = 10.0
+HOLGURA_MIRADA = 0.02
+ESPERA_MIRADA_S = 3.0
 
 ESTADO_INICIALIZANDO = 'inicializando'
 ESTADO_EXPLORANDO = 'explorando'
@@ -164,6 +166,10 @@ class Explorador(Node):
             self.largo_robot, self.ancho_robot, self.margen_seguridad)
         # Arranca vencido: la primera mirada es al empezar a explorar.
         self.recorrido_desde_mirada = math.inf
+        # Ya girando, un impacto que entra hasta HOLGURA_MIRADA en el círculo
+        # (ruido del scan en el límite) no corta la vuelta; si entra más, el
+        # robot espera quieto hasta ESPERA_MIRADA_S sin perder lo girado.
+        self.momento_bloqueo_mirada = None
         self.ultima_posicion = None
         self.pose_inicial_confirmada = False
         self.momento_confirmacion = None
@@ -971,13 +977,27 @@ class Explorador(Node):
         if not self.mirada.activa and self.recorrido_desde_mirada < self.distancia_entre_miradas:
             return False
         impactos = self.impactos_en_base()
-        if impactos is None or not giro_seguro(
-                impactos, self.holgura_de_giro(x, y), self.radio_giro):
-            if self.mirada.activa:
-                self.mirada.activa = False
+        radio = self.radio_giro - (HOLGURA_MIRADA if self.mirada.activa else 0.0)
+        if impactos is None or not giro_seguro(impactos, self.holgura_de_giro(x, y), radio):
+            if not self.mirada.activa:
+                return False
+            if self.momento_bloqueo_mirada is None:
+                self.momento_bloqueo_mirada = ahora
+            if ahora - self.momento_bloqueo_mirada < ESPERA_MIRADA_S:
+                # Quieto, sin reiniciar la vuelta: se retoma donde quedó.
+                self.detener()
                 self.seguimiento_avance = None
-                self.get_logger().warn('Mirada interrumpida: hay algo dentro del radio de giro.')
+                return True
+            # Sin reintentar enseguida: la próxima mirada, después de otro tramo.
+            self.mirada.activa = False
+            self.momento_bloqueo_mirada = None
+            self.recorrido_desde_mirada = 0.0
+            self.seguimiento_avance = None
+            self.get_logger().warn(
+                'Mirada abandonada: hay algo dentro del radio de giro; '
+                'se reintenta después del próximo tramo.')
             return False
+        self.momento_bloqueo_mirada = None
         if not self.mirada.activa:
             self.detener()
             self.mirada.iniciar(yaw, ahora)

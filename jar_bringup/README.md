@@ -229,6 +229,11 @@ más amplio. Termina alineado con la orientación inicial, así que no invalida 
 camino planificado, y el tiempo girando no cuenta para `timeout_sin_avance_s`.
 `distancia_entre_miradas: 0` lo desactiva.
 
+Una vez empezada, la vuelta tolera impactos hasta 2 cm dentro del círculo (ruido
+del láser en el límite). Si algo entra más, el robot espera quieto hasta 3 s y
+retoma donde quedó; antes cortaba y volvía a empezar 360° desde cero, y al arrancar
+daba varias vueltas. Si sigue bloqueado, abandona la mirada hasta el próximo tramo.
+
 ## Obstáculos que no están en el mapa
 
 El explorador marca como obstáculo temporal (8 s) cada impacto del scan en una celda

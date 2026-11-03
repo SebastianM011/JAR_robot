@@ -508,3 +508,36 @@ def test_no_sale_del_margen_si_el_scan_lo_impide(nodo):
     n = preparar_mirada(nodo)
     caja = np.array([[0.0, 0.13], [0.1, 0.13], [-0.1, 0.13]])
     assert not n.salir_del_margen(0.5, 0.17, 0.0, caja)
+
+
+def test_mirada_bloqueada_un_momento_se_retoma_sin_reiniciar(nodo, monkeypatch):
+    """Un impacto pasajero en el círculo frena el giro pero no empieza otra vuelta."""
+    n = preparar_mirada(nodo)
+    _, _, reloj = nodo
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))
+    yaw_inicial = n.mirada.yaw_inicial
+    monkeypatch.setattr(explorador, 'giro_seguro', lambda *args: False)
+    reloj.now.return_value = Time(seconds=101, clock_type=ClockType.ROS_TIME)
+    assert n.mirar_alrededor((0.5, 0.5, 1.0))
+    cmd = n.pub_cmd_vel.publish.call_args.args[0]
+    assert cmd.angular.z == 0.0 and n.mirada.activa
+    monkeypatch.setattr(explorador, 'giro_seguro', lambda *args: True)
+    reloj.now.return_value = Time(seconds=102, clock_type=ClockType.ROS_TIME)
+    assert n.mirar_alrededor((0.5, 0.5, 1.0))
+    assert n.mirada.yaw_inicial == yaw_inicial
+
+
+def test_mirada_bloqueada_se_abandona_y_no_reinicia_enseguida(nodo, monkeypatch):
+    n = preparar_mirada(nodo)
+    _, _, reloj = nodo
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))
+    monkeypatch.setattr(explorador, 'giro_seguro', lambda *args: False)
+    reloj.now.return_value = Time(seconds=101, clock_type=ClockType.ROS_TIME)
+    assert n.mirar_alrededor((0.5, 0.5, 1.0))
+    reloj.now.return_value = Time(seconds=101 + explorador.ESPERA_MIRADA_S,
+                                  clock_type=ClockType.ROS_TIME)
+    assert not n.mirar_alrededor((0.5, 0.5, 1.0))
+    assert not n.mirada.activa
+    monkeypatch.setattr(explorador, 'giro_seguro', lambda *args: True)
+    assert not n.mirar_alrededor((0.5, 0.5, 1.0))
+    assert not n.mirada.activa
