@@ -54,6 +54,10 @@ def distancia_huella(puntos, largo, ancho):
     return np.linalg.norm(np.maximum(q, 0), axis=1) + np.minimum(np.max(q, axis=1), 0)
 
 
+# Fracciones de la orden que se prueban, de mayor a menor: 1, 3/4, 1/2, ..., 1/32.
+ESCALAS_FRENADO = (1.0, 0.75) + tuple(0.5 ** k for k in range(1, 6))
+
+
 def regular_traslacion(velocidad, puntos, largo, ancho, margen, velocidad_maxima,
                        mapa_seguro, horizonte=0.8, paso=0.05, reaccion=0.15,
                        desaceleracion=0.4, velocidad_pasillo=0.10):
@@ -84,7 +88,7 @@ def regular_traslacion(velocidad, puntos, largo, ancho, margen, velocidad_maxima
     modulo = np.linalg.norm(v)
     if modulo > limite:
         v *= limite / modulo
-    for escala in (1.0, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125):
+    for escala in ESCALAS_FRENADO:
         candidata = v * escala
         rapidez = float(np.linalg.norm(candidata))
         duracion = max(horizonte, reaccion + rapidez / (2 * desaceleracion))
