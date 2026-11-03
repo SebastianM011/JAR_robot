@@ -270,8 +270,9 @@ def test_caja_fuera_del_mapa_replanifica_por_un_costado_y_expira(nodo):
     pendiente = Future()
     n.futuro_plan = pendiente
     n.recibir_scan(LaserScan())
-    # Cara de una caja a x=2 m, coordenadas relativas a la base en (0.8, 2).
-    impactos = np.array([(1.2, y) for y in np.linspace(-0.125, 0.125, 11)])
+    # Cara de una caja a x=1.7 m (dentro de alcance_obstaculos_scan),
+    # coordenadas relativas a la base en (0.8, 2).
+    impactos = np.array([(0.9, y) for y in np.linspace(-0.125, 0.125, 11)])
     n.actualizar_obstaculos((0.8, 2.0, 0.0), impactos)
     assert pendiente.cancelled()
     assert n.camino is None
@@ -591,3 +592,43 @@ def test_el_temblor_de_la_pose_no_suma_recorrido(nodo):
     for i in range(400):
         assert not n.mirar_alrededor((0.5 + 0.01 * (i % 2), 0.5, 0.0))
     assert n.recorrido_desde_mirada < 0.02
+
+
+def test_impactos_lejanos_no_son_obstaculos_temporales(nodo):
+    n = preparar_mirada(nodo)
+    n.alcance_obstaculos_scan = 0.3
+    n.actualizar_obstaculos((0.5, 0.5, 0.0), np.array([[0.35, 0.0], [0.2, 0.0]]))
+    assert len(n.obstaculos_temporales) == 1
+
+
+def test_impacto_suelto_no_es_obstaculo_hasta_repetirse(nodo):
+    """Con impactos_minimos_scan, una celda vista en un solo scan no bloquea."""
+    from sensor_msgs.msg import LaserScan
+    n = preparar_mirada(nodo)
+    n.impactos_minimos_scan = 3
+    libre = n.libre_fino.copy()
+    impacto = np.array([[0.2, 0.0]])
+    for vez in range(3):
+        n.recibir_scan(LaserScan())
+        n.actualizar_obstaculos((0.5, 0.5, 0.0), impacto)
+        assert np.array_equal(n.libre_fino, libre) == (vez < 2)
+
+
+def test_con_camino_vigente_no_vuelve_a_elegir_destino(nodo, monkeypatch):
+    """Mientras el camino hacia la zona sigue libre, el destino no se reevalúa."""
+    n = preparar_mirada(nodo)
+    cobertura = mapa()
+    cobertura.data[10 * 20 + 14] = 100
+    n.recibir_grilla(cobertura)
+    zona = (10, 14)
+    n.objetivo_mision = n.objetivo_celda = zona
+    n.destino_actual = (0.72, 0.52)
+    n.camino = [n.celda_de(0.6, 0.5, n.info_mapa), n.celda_de(0.72, 0.52, n.info_mapa)]
+
+    def no_llamar(*args):
+        raise AssertionError('no debería reelegir el destino')
+
+    monkeypatch.setattr(n, 'punto_seguro_en_zona', no_llamar)
+    monkeypatch.setattr(n, 'punto_para_observar', no_llamar)
+    n.actuar((0.5, 0.5, 0.0))
+    assert n.objetivo_celda == zona

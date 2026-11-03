@@ -239,20 +239,26 @@ el temblor de la pose) y además hace falta que el porcentaje cubierto haya subi
 última vuelta: si el robot solo pasó por zonas ya vistas, no hay nada nuevo que
 mirar y no gira.
 
-### Zonas sin punto de observación
+### Elección de destinos
 
-Para una zona sin destino directo, el explorador lanza rayos desde la zona sobre el
-mapa (`celdas_visibles`) y elige la celda alcanzable más cercana que la ve. Se calcula
-una vez por zona, en milisegundos; antes probaba candidato por candidato durante varios
-ciclos, tardaba minutos con la simulación lenta y, al ceder el turno a otras zonas,
-el robot iba y venía de una punta a la otra del laberinto.
-
-- Si ningún punto ve la zona, queda en `zonas_inobservables` hasta un mapa nuevo.
-- Si hay puntos que la ven pero ahora no se llega (el scan encierra al robot), se
-  reintenta a los 10 s; después de 3 intentos se descarta.
-- La huella se calcula alineada con el eje del mapa más cercano (hasta 0.1 rad de
-  desvío) y el control corrige el giro: la deriva de las ruedas ya no recalcula el
-  espacio libre en cada ciclo. Los obstáculos del scan tampoco borran lo ya buscado.
+- **Puntos de observación.** Para una zona sin destino directo, se lanzan rayos en
+  360° desde unas celdas de la zona sobre el mapa (`celdas_visibles`, vectorizado)
+  y se elige la celda alcanzable más cercana a la zona que la ve. Se calcula una vez
+  por zona (~0.1 s); antes se probaba celda por celda durante minutos.
+- **Inalcanzable o invisible.** Si ningún lugar del mapa ve la zona, se descarta
+  hasta que cambie el mapa (`zonas_inobservables`). Si la ven lugares adonde ahora no
+  se llega, se reintenta a los 10 s; a los 3 intentos, se descarta.
+- **Compromiso.** Con un camino vigente hacia la zona, el robot lo sigue sin volver a
+  elegir destino; el camino se descarta solo si deja de ser transitable o si no hay
+  avance.
+- **Obstáculos del scan.** Solo cuentan impactos a menos de `alcance_obstaculos_scan`
+  (1 m), a más de `distancia_pared_conocida` (15 cm) de una pared del mapa y vistos en
+  `impactos_minimos_scan` (3) scans distintos. En `maze_1_6x5` el localizador tiene
+  ~5 cm y 2-4° de error: una pared lejana aparecía corrida 10-20 cm y llenaba el mapa
+  de obstáculos falsos (cientos de celdas) que tapaban las puertas.
+- **Orientación.** La huella se calcula alineada con el eje del mapa más cercano si
+  el robot está a menos de ~6° de él, y el control corrige ese desvío mientras avanza.
+  Antes, cada 1.7° de deriva recalculaba el espacio libre y frenaba el robot.
 - Si todas las zonas que quedan están descartadas durante 10 s, el robot vuelve al
   origen con el porcentaje que tenga, y en ese momento se reportan las víctimas.
 
@@ -264,7 +270,7 @@ caja azul: con 4 cm de error de localización, los impactos de las paredes caía
 celdas libres y las engordaban, y la caja, inflada con el mismo margen de 5 cm que
 las paredes, dejaba un paso de 2 cm entre ella y la punta de una pared.
 
-- Los impactos a menos de `distancia_pared_conocida` (10 cm) de una pared del mapa
+- Los impactos a menos de `distancia_pared_conocida` (15 cm) de una pared del mapa
   se ignoran: son esa pared vista con error, no un obstáculo nuevo.
 - Los obstáculos que solo ve el scan se inflan con `margen_obstaculos_scan` (2 cm).
   Las paredes del mapa, dibujadas más gruesas que las reales, mantienen

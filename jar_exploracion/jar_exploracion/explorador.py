@@ -100,6 +100,12 @@ class Explorador(Node):
         # Margen para obstáculos que solo ve el scan (cajas). Las paredes del mapa,
         # dibujadas más gruesas que las reales, conservan margen_seguridad.
         self.declare_parameter('margen_obstaculos_scan', 0.02)
+        # Solo impactos cercanos son obstáculos temporales: lejos, unos grados de
+        # error de orientación corren la pared conocida más que distancia_pared_conocida.
+        self.declare_parameter('alcance_obstaculos_scan', 1.0)
+        # Scans distintos que tienen que ver una celda para tratarla como obstáculo:
+        # un impacto suelto (ruido, error de pose) no se repite; una caja, sí.
+        self.declare_parameter('impactos_minimos_scan', 1)
         # Si el robot queda dentro del margen de una pared, se aleja despacio
         # hasta la celda libre más cercana dentro de este radio.
         self.declare_parameter('radio_escape', 0.20)
@@ -161,6 +167,8 @@ class Explorador(Node):
         self.distancia_entre_miradas = self.get_parameter('distancia_entre_miradas').value
         self.distancia_pared_conocida = self.get_parameter('distancia_pared_conocida').value
         self.margen_obstaculos_scan = self.get_parameter('margen_obstaculos_scan').value
+        self.alcance_obstaculos_scan = self.get_parameter('alcance_obstaculos_scan').value
+        self.impactos_minimos_scan = self.get_parameter('impactos_minimos_scan').value
         self.radio_escape = self.get_parameter('radio_escape').value
         self.velocidad_escape = self.get_parameter('velocidad_escape').value
         if self.distancia_pared_conocida < 0 or self.margen_obstaculos_scan < 0:
@@ -200,6 +208,10 @@ class Explorador(Node):
         self.no_cubiertas = None    # bool[alto, ancho], resolución de grilla_cobertura
         self.info_grilla = None     # MapMetaData de grilla_cobertura (resolución gruesa)
         self.obstaculos_temporales = {}
+        # Scans distintos en que se vio cada celda de obstaculos_temporales.
+        self.conteo_impactos = {}
+        # Destino del camino vigente (punto de la zona o de observación).
+        self.destino_actual = None
         self.scan_integrado = None
         self.ultimo_scan = None
         self.momento_scan = None
@@ -293,6 +305,7 @@ class Explorador(Node):
         self.distancia_a_pared = dist_a_pared
         self.datos_mapa = datos
         self.obstaculos_temporales.clear()
+        self.conteo_impactos.clear()
         self.scan_integrado = None
         self.datos_planificacion = datos.copy()
 
@@ -358,21 +371,30 @@ class Explorador(Node):
         self.obstaculos_temporales = {
             celda: instante for celda, instante in self.obstaculos_temporales.items()
             if 0 <= ahora - instante <= 8.0}
+        self.conteo_impactos = {celda: self.conteo_impactos.get(celda, 0)
+                                for celda in self.obstaculos_temporales}
         if self.scan_integrado is not self.ultimo_scan:
+            vistas = set()
             x, y, yaw = pose
             c, s = math.cos(yaw), math.sin(yaw)
             alto, ancho = self.datos_mapa.shape
             for bx, by in impactos:
+                if math.hypot(bx, by) > self.alcance_obstaculos_scan:
+                    continue
                 fila, col = self.celda_de(x + c * bx - s * by,
                                           y + s * bx + c * by, self.info_mapa)
                 if (0 <= fila < alto and 0 <= col < ancho
                         and self.datos_mapa[fila, col] == 0
                         and self.distancia_a_pared[fila, col] > self.distancia_pared_conocida):
                     self.obstaculos_temporales[fila, col] = ahora
+                    vistas.add((fila, col))
+            for celda in vistas:
+                self.conteo_impactos[celda] = self.conteo_impactos.get(celda, 0) + 1
             self.scan_integrado = self.ultimo_scan
         datos = self.datos_mapa.copy()
         for celda in self.obstaculos_temporales:
-            datos[celda] = 100
+            if self.conteo_impactos.get(celda, 0) >= self.impactos_minimos_scan:
+                datos[celda] = 100
         if np.array_equal(datos, self.datos_planificacion):
             return
         self.datos_planificacion = datos
@@ -458,6 +480,7 @@ class Explorador(Node):
         self.objetivo_mision = None
         self.detector_deslizamiento.reiniciar()
         self.obstaculos_temporales.clear()
+        self.conteo_impactos.clear()
         self.scan_integrado = None
         if self.futuro_plan is not None:
             self.futuro_plan.cancel()
@@ -888,6 +911,7 @@ class Explorador(Node):
             return
 
         self.camino = camino
+        self.destino_actual = objetivo_mundo
         self.publicar_camino(camino)
 
     def siguiente_punto_del_camino(self, x_r, y_r):
@@ -1166,15 +1190,21 @@ class Explorador(Node):
                     throttle_duration_sec=10.0)
                 self.detener()
                 return
-            objetivo_mundo = self.punto_seguro_en_zona(objetivo_grueso, componente)
-            if objetivo_mundo is not None:
+            # Con un camino vigente hacia esta zona se sigue sin volver a elegir:
+            # un cambio pasajero del espacio libre no hace abandonar el objetivo.
+            # actualizar_obstaculos borra el camino si deja de ser transitable.
+            comprometido = (objetivo_grueso == self.objetivo_celda and bool(self.camino)
+                            and self.destino_actual is not None)
+            objetivo_mundo = (self.destino_actual if comprometido
+                              else self.punto_seguro_en_zona(objetivo_grueso, componente))
+            if objetivo_mundo is not None and not comprometido:
                 celda_robot = self.celda_fina_segura(x_r, y_r)
                 celda_objetivo = self.celda_fina_segura(*objetivo_mundo)
                 if (celda_robot is None or not self.libre_fino[celda_robot]
                         or self.componentes_libres[celda_robot]
                         != self.componentes_libres[celda_objetivo]):
                     objetivo_mundo = None
-            if objetivo_grueso in self.observaciones_fallidas:
+            if objetivo_grueso in self.observaciones_fallidas and not comprometido:
                 objetivo_mundo = None
             if objetivo_mundo is None:
                 celda_robot = self.celda_fina_segura(x_r, y_r)
@@ -1201,9 +1231,15 @@ class Explorador(Node):
                 # el scan encierra al robot): reintentar, no descartar.
                 self.objetivos_pendientes[objetivo_grueso] = (
                     self.get_clock().now().nanoseconds / 1e9 + self.reintento_objetivo_s)
+                celda_r = self.celda_fina_segura(x_r, y_r)
+                area = (np.count_nonzero(
+                    self.componentes_libres == self.componentes_libres[celda_r])
+                    * self.info_mapa.resolution ** 2)
                 self.get_logger().info(
-                    f'Zona {objetivo_grueso}: ningún punto que la ve es alcanzable ahora; '
-                    'se reintenta más tarde.', throttle_duration_sec=10.0)
+                    f'Zona {objetivo_grueso}: ningún punto que la ve es alcanzable ahora '
+                    f'(área alcanzable {area:.2f} m², {len(self.obstaculos_temporales)} celdas '
+                    f'del scan, robot en ({x_r:.2f}, {y_r:.2f})); se reintenta más tarde.',
+                    throttle_duration_sec=10.0)
                 self.camino = None
                 self.publicar_camino([])
                 self.detener()

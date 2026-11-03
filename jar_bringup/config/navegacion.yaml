@@ -69,11 +69,18 @@ explorador:
     pasos_mirada: 8
     pausa_mirada_s: 0.6
     velocidad_mirada: 0.6
-    # Obstáculos del scan: se ignoran a menos de 10 cm de una pared del mapa
+    # Obstáculos del scan: se ignoran a menos de 15 cm de una pared del mapa
     # (es la pared vista con error de localización) y se inflan con 2 cm de
     # margen en vez de margen_seguridad. Ver README.
-    distancia_pared_conocida: 0.10
+    distancia_pared_conocida: 0.15
     margen_obstaculos_scan: 0.02
+    # Solo impactos a menos de 1 m: con 2-4° de error de orientación del
+    # localizador, una pared a 3 m aparece 10-20 cm corrida y llenaba el mapa
+    # de obstáculos falsos que partían el espacio libre.
+    alcance_obstaculos_scan: 1.0
+    # Una celda es obstáculo si la ven 3 scans distintos: el error de pose
+    # tira impactos sueltos que no se repiten en el mismo lugar.
+    impactos_minimos_scan: 3
     # Si queda dentro del margen de una pared, se aleja despacio hasta la
     # celda libre más cercana (hasta 20 cm) en vez de quedarse detenido.
     radio_escape: 0.20
