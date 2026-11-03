@@ -24,3 +24,8 @@ localizador:
     submuestreo_scan: 15
     ruido_remuestreo_xy: 0.01
     ruido_remuestreo_theta: 0.01
+    respaldo_odometria: true
+    dispersion_maxima: 0.15
+    tolerancia_calidad: 5.0
+    scans_para_resembrar: 10
+    dispersion_resembrado: 0.05

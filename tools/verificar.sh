@@ -75,5 +75,7 @@ sleep 8
 ros2 bag play /bags/laberinto_victimas --clock > /dev/null 2>&1
 sleep 3
 grep -E "Víctima" pipeline.log | sed 's/^.*\] \[/[/'
+echo "Veces que pasó a odometría: $(grep -c "poco confiable" pipeline.log)," \
+    "re-siembras: $(grep -c "re-sembradas alrededor" pipeline.log)"
 grep -E "Puntaje|caja roja" evaluador.log | tail -3 \
     | sed 's/^\[evaluador-1\] //; s/^\[INFO\] \[[^]]*\] //'

@@ -4,9 +4,10 @@ import math
 
 import numpy as np
 
-from jar_localizacion.filtro import (campo_de_probabilidad, componer_poses, dispersar,
-                                     estimar_pose, invertir_pose, mover_particulas,
-                                     pesar_particulas, remuestrear, sembrar_particulas)
+from jar_localizacion.filtro import (calidad_scan, campo_de_probabilidad, componer_poses,
+                                     dispersar, dispersion_xy, estimar_pose, invertir_pose,
+                                     mover_particulas, pesar_particulas, remuestrear,
+                                     sembrar_particulas, usar_filtro)
 
 SIN_RUIDO = [0.0] * 6
 
@@ -89,3 +90,27 @@ def test_dispersar_evita_el_colapso():
     assert 0.005 < np.std(nuevas[:, 0]) < 0.02
     assert np.all(np.abs(nuevas[:, 2]) <= math.pi)
     assert np.allclose(dispersar(nuevas, 0.0, 0.0), nuevas)
+
+
+def test_calidad_scan_es_mayor_donde_calza():
+    """Desde la pose correcta el scan cae sobre la pared; corrido 30 cm, no."""
+    grid = np.zeros((20, 20))
+    grid[:, 15] = 100
+    campo = campo_de_probabilidad(grid, 0.1, 0.05)
+    puntos = np.array([[1.0, -0.2], [1.0, 0.0], [1.0, 0.2]])
+    buena = calidad_scan((0.55, 1.0, 0.0), puntos, campo, 0.1, 0.0, 0.0)
+    corrida = calidad_scan((0.25, 1.0, 0.0), puntos, campo, 0.1, 0.0, 0.0)
+    assert buena > 90.0
+    assert corrida < 10.0
+
+
+def test_dispersion_xy():
+    particulas = np.array([[0.0, 0.0, 0, 0.5], [0.2, 0.0, 0, 0.5]])
+    assert math.isclose(dispersion_xy(particulas), 0.1)
+
+
+def test_usar_filtro():
+    """Se usa el filtro salvo que esté abierto o calce claramente peor que la odometría."""
+    assert usar_filtro(80.0, 82.0, 0.05, 0.15, 5.0)
+    assert not usar_filtro(60.0, 82.0, 0.05, 0.15, 5.0)
+    assert not usar_filtro(90.0, 50.0, 0.30, 0.15, 5.0)

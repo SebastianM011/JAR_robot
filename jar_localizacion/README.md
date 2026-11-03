@@ -59,6 +59,22 @@ las paredes. Con 1.0 se pierde después de los primeros giros. Los valores está
 | `escala_avance`, `escala_giro` | 1.0 | Corrección de escala de `/odom` |
 | `submuestreo_scan` | 15 | Se usa uno de cada N rayos para pesar |
 | `ruido_remuestreo_xy`, `ruido_remuestreo_theta` | 0.01 | Ruido (m, rad) después de remuestrear; 0 lo desactiva |
+| `respaldo_odometria` | true | Seguir con odometría cuando el filtro no es confiable |
+| `dispersion_maxima` | 0.15 | Desvío xy (m) de la nube a partir del cual el filtro no se usa |
+| `tolerancia_calidad` | 5.0 | Cuánto peor (0-100) puede calzar el scan desde el filtro que desde la odometría |
+| `scans_para_resembrar` | 10 | Scans seguidos con odometría antes de re-sembrar alrededor de ella |
+| `dispersion_resembrado` | 0.05 | Desvío (m y rad) de esa nube |
+
+### Respaldo con odometría
+
+En cada scan se compara la pose del filtro con la que da la odometría desde la
+última corrección aceptada (`map -> odom` sin cambiar). Para cada una se mide la
+calidad: la probabilidad media del campo donde caen los puntos del scan. Si la
+nube está abierta (más de `dispersion_maxima`) o el filtro calza más de
+`tolerancia_calidad` peor, `map -> odom` queda fija y la pose sigue solo a la
+odometría. Si eso dura `scans_para_resembrar` scans y la odometría calza
+claramente mejor, el filtro se perdió: las partículas se re-siembran alrededor
+de la pose de odometría. Los cambios de modo quedan en el log del localizador.
 
 ### Por qué el ruido después de remuestrear
 

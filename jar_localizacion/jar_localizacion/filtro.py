@@ -78,12 +78,12 @@ def mover_particulas(particulas, dx, dy, dtheta, theta0, gammas,
     return nuevas
 
 
-def pesar_particulas(particulas, puntos, campo, resolucion, origen_x, origen_y):
+def probabilidades_scan(particulas, puntos, campo, resolucion, origen_x, origen_y):
     """
-    Pesos normalizados según cuánto calza el scan contra el campo.
+    Probabilidad del campo (1-100) donde cae cada punto, para cada partícula.
 
-    `puntos` es un array Mx2 en el frame del robot. Los puntos fuera del
-    mapa o en celdas de probabilidad nula aportan una probabilidad mínima.
+    `puntos` es un array Mx2 en el frame del robot; devuelve una matriz NxM.
+    Los puntos fuera del mapa o en celdas de probabilidad nula valen 1.
     """
     x = particulas[:, 0][:, None]
     y = particulas[:, 1][:, None]
@@ -101,7 +101,13 @@ def pesar_particulas(particulas, puntos, campo, resolucion, origen_x, origen_y):
 
     probabilidad = np.ones(xs.shape)
     probabilidad[dentro] = np.maximum(campo[fila[dentro], col[dentro]], 1.0)
+    return probabilidad
 
+
+def pesar_particulas(particulas, puntos, campo, resolucion, origen_x, origen_y):
+    """Pesos normalizados según cuánto calza el scan contra el campo."""
+    probabilidad = probabilidades_scan(particulas, puntos, campo, resolucion,
+                                       origen_x, origen_y)
     log_pesos = np.log(probabilidad).sum(axis=1)
     log_pesos -= log_pesos.max()
     pesos = np.exp(log_pesos)
@@ -109,6 +115,13 @@ def pesar_particulas(particulas, puntos, campo, resolucion, origen_x, origen_y):
     if not np.isfinite(total) or total <= 0.0:
         return np.full(len(particulas), 1.0 / len(particulas))
     return pesos / total
+
+
+def calidad_scan(pose, puntos, campo, resolucion, origen_x, origen_y):
+    """Probabilidad media (0-100) del campo donde caen los puntos vistos desde `pose`."""
+    particula = np.array([[pose[0], pose[1], pose[2], 1.0]])
+    return float(np.mean(probabilidades_scan(particula, puntos, campo, resolucion,
+                                             origen_x, origen_y)))
 
 
 def remuestrear(particulas, pesos, rng=np.random):
@@ -146,3 +159,21 @@ def estimar_pose(particulas):
         float(math.atan2(np.mean(np.sin(particulas[:, 2])),
                          np.mean(np.cos(particulas[:, 2])))),
     )
+
+
+def dispersion_xy(particulas):
+    """Desvío de la nube en metros: raíz de la suma de las varianzas en x e y."""
+    return float(math.sqrt(np.var(particulas[:, 0]) + np.var(particulas[:, 1])))
+
+
+def usar_filtro(calidad_filtro, calidad_odometria, dispersion, dispersion_maxima, tolerancia):
+    """
+    Decide si la pose del filtro es confiable o conviene seguir con odometría.
+
+    El filtro se descarta si la nube está muy abierta o si el scan calza
+    peor desde su pose que desde la que da la odometría desde la última
+    corrección aceptada (con `tolerancia` en puntos de probabilidad).
+    """
+    if dispersion > dispersion_maxima:
+        return False
+    return calidad_filtro + tolerancia >= calidad_odometria
