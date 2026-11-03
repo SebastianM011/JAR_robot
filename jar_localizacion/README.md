@@ -12,7 +12,7 @@ de odometría de la semana 10. La teoría está en el README de ese workshop.
 | --- | --- | --- |
 | `publicar_mapa` | `yaml_filename` (mapa de map_server) | `/map` (transient local), sin Nav2 |
 | `campo_verosimilitud` | `/map` | `/likelihood_map` (transient local) |
-| `localizador` | `/likelihood_map`, `/scan`, `/odom`, `initialpose` | TF `map -> odom`, `/particlecloud`, `/camino_odom`, `/camino_corregido`, `/camino_real` (solo simulador) |
+| `localizador` | `/likelihood_map`, `/scan`, `/odom`, `initialpose` | TF `map -> odom`, `/particlecloud`, `/camino_odom`, `/camino_corregido` |
 | `medir_odometria` | `/odom`, `/imu/data`, `/scan` | Log con giro odom/IMU y avance odom/lidar trasero |
 | `odom_corregida` | `/odom` | `/camino_odom`, `/camino_corregido` con las escalas aplicadas |
 

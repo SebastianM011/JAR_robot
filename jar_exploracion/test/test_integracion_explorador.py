@@ -640,3 +640,42 @@ def test_costo_centra_el_camino_en_un_pasillo(nodo):
     costos = [n.costo_fino[n.celda_de(0.5, y, n.info_mapa)] for y in (0.5, 0.45, 0.4)]
     assert costos[0] <= costos[1] <= costos[2]
     assert costos[0] < costos[2]
+
+
+def test_regreso_por_tiempo_y_done_en_la_largada(nodo):
+    """Vencido tiempo_regreso_s vuelve; en la largada publica /done una sola vez."""
+    n = preparar_mirada(nodo)
+    _, _, reloj = nodo
+    n.origen = (0.5, 0.5)
+    n.tiempo_regreso_s = 30.0
+    n.momento_mapa = Time(seconds=100, clock_type=ClockType.ROS_TIME)
+    reloj.now.return_value = Time(seconds=131, clock_type=ClockType.ROS_TIME)
+    n.revisar_reloj()
+    n.transicionar((2.0, 2.0, 0.0))
+    assert n.estado == explorador.ESTADO_REGRESANDO
+    n.transicionar((0.5, 0.5, 0.0))
+    assert n.estado == explorador.ESTADO_TERMINADO
+
+
+def test_con_todas_las_victimas_vuelve(nodo):
+    n = preparar_mirada(nodo)
+    n.recibir_victimas_completas(None)
+    n.transicionar((2.0, 2.0, 0.0))
+    assert n.estado == explorador.ESTADO_REGRESANDO
+
+
+def test_quieto_mucho_tiempo_fuerza_una_mirada(nodo):
+    n = preparar_mirada(nodo)
+    _, _, reloj = nodo
+    n.posicion_ultima_mirada = (0.5, 0.5)
+    n.cubiertas_en_ultima_mirada = n.celdas_cubiertas
+    n.velocidad_ordenada = 0.0
+    n.revisar_reloj()
+    reloj.now.return_value = Time(seconds=100 + n.espera_inmovil_s,
+                                  clock_type=ClockType.ROS_TIME)
+    n.revisar_reloj()
+    assert n.forzar_mirada
+    # El scan del helper tiene el sello de t=100: volver ahí para que siga vigente.
+    reloj.now.return_value = Time(seconds=100, clock_type=ClockType.ROS_TIME)
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))
+    assert n.mirada.activa

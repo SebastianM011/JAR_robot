@@ -74,6 +74,7 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.zonas_sin_destino = {(0, 0)}
     nodo.zonas_inobservables = set()
     nodo.momento_sin_destinos = None
+    nodo.motivo_regreso = None
     reloj = Mock()
     reloj.now.return_value.nanoseconds = 0
     nodo.get_clock = lambda: reloj
@@ -289,6 +290,7 @@ def test_zona_inobservable_persiste_y_sin_destinos_se_regresa():
     nodo.celdas_cubiertas = 1
     nodo.porcentaje_objetivo = 95.0
     nodo.momento_sin_destinos = None
+    nodo.motivo_regreso = None
     nodo.futuro_plan = None
     nodo.publicar_camino = Mock()
     nodo.detener = Mock()

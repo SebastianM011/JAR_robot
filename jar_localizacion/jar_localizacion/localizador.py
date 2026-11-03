@@ -124,21 +124,18 @@ class Localizador(Node):
         self.create_subscription(OccupancyGrid, 'likelihood_map', self.recibir_campo, QOS_MAPA)
         self.create_subscription(LaserScan, 'scan', self.recibir_scan, qos_profile_sensor_data)
         self.create_subscription(Odometry, 'odom', self.recibir_odom, 10)
-        self.create_subscription(Odometry, 'ground_truth/odom', self.recibir_ground_truth, 10)
         self.create_subscription(
             PoseWithCovarianceStamped, 'initialpose', self.recibir_pose_inicial, 10)
 
         self.pub_particulas = self.create_publisher(PoseArray, 'particlecloud', 10)
         self.pub_camino_odom = self.create_publisher(Path, 'camino_odom', 10)
         self.pub_camino_corregido = self.create_publisher(Path, 'camino_corregido', 10)
-        self.pub_camino_real = self.create_publisher(Path, 'camino_real', 10)
 
         # camino_odom carga poses de odom en map: solo coincide si map y odom
         # arrancan alineados (pose inicial en el origen).
         self.camino_odom_msg = Path()
         self.camino_corregido_msg = Path()
-        self.camino_real_msg = Path()
-        for camino in (self.camino_odom_msg, self.camino_corregido_msg, self.camino_real_msg):
+        for camino in (self.camino_odom_msg, self.camino_corregido_msg):
             camino.header.frame_id = self.map_frame
 
     # ---------- callbacks ----------
@@ -161,13 +158,6 @@ class Localizador(Node):
         self.scans_con_odometria = 0
         self.publicar_particulas()
         self.get_logger().info(f'Partículas re-sembradas en ({x:.2f}, {y:.2f}, {theta:.2f}).')
-
-    def recibir_ground_truth(self, msg: Odometry):
-        """Solo para comparar en RViz: no existe en el robot físico."""
-        pose = msg.pose.pose
-        self.acumular_camino(self.camino_real_msg, self.pub_camino_real,
-                             pose.position.x, pose.position.y,
-                             yaw_de_quaternion(pose.orientation))
 
     def recibir_odom(self, msg: Odometry):
         """Predicción con el desplazamiento desde la odometría anterior."""

@@ -13,10 +13,10 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile,
                        QoSReliabilityPolicy, qos_profile_sensor_data)
 from rclpy.time import Time
 
-from nav_msgs.msg import OccupancyGrid, Odometry, Path
+from nav_msgs.msg import OccupancyGrid, Path
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, Quaternion, PoseStamped, PoseWithCovarianceStamped
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Empty, Float32, String
 from visualization_msgs.msg import Marker
 
 from tf2_ros import Buffer, TransformListener
@@ -25,7 +25,6 @@ from jar_exploracion.mirada import (MiradaPorPasos, eje_mas_cercano, giro_seguro
                                     radio_de_giro)
 from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
 from jar_exploracion.trazado import celdas_visibles
-from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
 from jar_exploracion.seguridad import (buscar_desvio, celda_libre_cercana, escape_seguro,
                                        espacio_transitable, puntos_scan, regular_traslacion)
 
@@ -51,7 +50,6 @@ ESTADO_EXPLORANDO = 'explorando'
 ESTADO_REGRESANDO = 'regresando_al_origen'
 ESTADO_TERMINADO = 'terminado'
 ESTADO_SIN_DESTINOS = 'sin_destinos_transitables'
-ESTADO_DESLIZAMIENTO = 'bloqueado_deslizamiento'
 
 
 def yaw_de_quaternion(q: Quaternion) -> float:
@@ -82,7 +80,6 @@ class Explorador(Node):
         self.declare_parameter('timeout_scan_s', 0.5)
         self.declare_parameter('reintento_objetivo_s', 10.0)
         self.declare_parameter('timeout_sin_avance_s', 15.0)
-        self.declare_parameter('verificar_movimiento_simulado', False)
         self.declare_parameter('largo_robot', 0.37)
         self.declare_parameter('ancho_robot', 0.24)
         self.declare_parameter('timeout_pose_s', 0.5)
@@ -111,6 +108,13 @@ class Explorador(Node):
         # Si el robot queda dentro del margen de una pared, se aleja despacio
         # hasta la celda libre más cercana dentro de este radio.
         self.declare_parameter('radio_escape', 0.20)
+        # Reglamento: corrida de 10 min desde /map. Pasado este tiempo se reportan
+        # las víctimas y se vuelve a la largada (0 lo desactiva).
+        self.declare_parameter('tiempo_regreso_s', 0.0)
+        # Con las N víctimas reportadas no queda nada que buscar: volver y /done.
+        self.declare_parameter('regresar_con_todas', True)
+        # El jurado corta la corrida tras 60 s sin moverse: antes, una mirada.
+        self.declare_parameter('espera_inmovil_s', 40.0)
         self.declare_parameter('velocidad_escape', 0.06)
 
         self.largo_robot = self.get_parameter('largo_robot').value
@@ -155,7 +159,6 @@ class Explorador(Node):
         if self.timeout_sin_avance_s <= 0:
             raise ValueError('timeout_sin_avance_s debe ser positivo')
         self.seguimiento_avance = None
-        self.detector_deslizamiento = DetectorDeslizamiento()
         self.velocidad_ordenada = 0.0
         if self.timeout_scan_s <= 0 or self.reintento_objetivo_s <= 0:
             raise ValueError('Los tiempos de scan y reintento deben ser positivos')
@@ -171,6 +174,14 @@ class Explorador(Node):
         self.alcance_obstaculos_scan = self.get_parameter('alcance_obstaculos_scan').value
         self.impactos_minimos_scan = self.get_parameter('impactos_minimos_scan').value
         self.radio_escape = self.get_parameter('radio_escape').value
+        self.tiempo_regreso_s = self.get_parameter('tiempo_regreso_s').value
+        self.regresar_con_todas = self.get_parameter('regresar_con_todas').value
+        self.espera_inmovil_s = self.get_parameter('espera_inmovil_s').value
+        self.momento_mapa = None
+        self.motivo_regreso = None
+        self.done_publicado = False
+        self.momento_movimiento = None
+        self.forzar_mirada = False
         self.velocidad_escape = self.get_parameter('velocidad_escape').value
         if self.distancia_pared_conocida < 0 or self.margen_obstaculos_scan < 0:
             raise ValueError(
@@ -254,6 +265,9 @@ class Explorador(Node):
         self.pub_objetivo = self.create_publisher(Marker, 'objetivo_actual', 10)
         self.pub_camino = self.create_publisher(Path, 'camino_planificado', 10)
         self.pub_estado = self.create_publisher(String, 'estado', 10)
+        # /done (reliable) termina la corrida; con el robot en la largada suma el bono.
+        self.pub_done = self.create_publisher(Empty, 'done', 10)
+        self.create_subscription(Empty, 'victimas_completas', self.recibir_victimas_completas, 10)
         self.pub_porcentaje = self.create_publisher(Float32, 'porcentaje_cobertura', 10)
         # Modo competencia: el robot manda solo el mismo mensaje que el
         # "2D Pose Estimate" de RViz, cuando ya está todo cargado.
@@ -261,10 +275,6 @@ class Explorador(Node):
             PoseWithCovarianceStamped, 'initialpose', 10)
         self.pose_auto_enviada = False
         self.momento_primer_scan = None
-        if self.get_parameter('verificar_movimiento_simulado').value:
-            self.create_subscription(
-                Odometry, '/ground_truth/odom', self.verificar_movimiento,
-                qos_profile_sensor_data)
 
         self.ejecutor_plan = ThreadPoolExecutor(max_workers=1, thread_name_prefix='planificador')
         self.timer = self.create_timer(1.0 / FRECUENCIA_HZ, self.controlar)
@@ -284,6 +294,9 @@ class Explorador(Node):
             return
         self.info_mapa_fuente = deepcopy(msg.info)
         self.datos_mapa_fuente = datos.copy()
+        if self.momento_mapa is None:
+            # La publicación de /map larga el cronómetro oficial.
+            self.momento_mapa = self.get_clock().now()
         info = deepcopy(msg.info)
         factor = self.subdivisiones_mapa
         if factor > 1:
@@ -489,7 +502,6 @@ class Explorador(Node):
         self.publicar_camino([])
         self.objetivos_pendientes.clear()
         self.objetivo_mision = None
-        self.detector_deslizamiento.reiniciar()
         self.obstaculos_temporales.clear()
         self.conteo_impactos.clear()
         self.scan_integrado = None
@@ -516,28 +528,6 @@ class Explorador(Node):
                 f'Transición: * -> {ESTADO_INICIALIZANDO} (pose corregida desde RViz)')
 
     # ---------- geometría ----------
-
-    def verificar_movimiento(self, msg):
-        """Usa la medición de Gazebo solo para detectar deslizamiento, sin publicar TF."""
-        if self.estado not in (ESTADO_EXPLORANDO, ESTADO_REGRESANDO):
-            self.detector_deslizamiento.reiniciar()
-            return
-        pose = self.obtener_pose_robot()
-        if pose is None:
-            self.detector_deslizamiento.reiniciar()
-            return
-        posicion = msg.pose.pose.position
-        instante = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        if self.detector_deslizamiento.actualizar(
-                instante, (posicion.x, posicion.y), pose[:2], self.velocidad_ordenada):
-            self.estado = ESTADO_DESLIZAMIENTO
-            self.camino = None
-            self.publicar_camino([])
-            self.detener()
-            self.get_logger().error(
-                'Deslizamiento detectado: la pose estimada avanza, pero el chasis '
-                'de Gazebo permanece quieto. Exploración detenida. Revisar el paso '
-                'y corregir la pose con 2D Pose Estimate antes de continuar.')
 
     def obtener_pose_robot(self):
         try:
@@ -1013,10 +1003,12 @@ class Explorador(Node):
             # En línea recta desde la última vuelta: sumar cada paso acumulaba
             # el temblor de la pose y el robot giraba casi sin moverse.
             self.recorrido_desde_mirada = math.dist((x, y), self.posicion_ultima_mirada)
-        if self.estado != ESTADO_EXPLORANDO or self.distancia_entre_miradas == 0:
+        permitidos = ((ESTADO_EXPLORANDO, ESTADO_REGRESANDO) if self.forzar_mirada
+                      else (ESTADO_EXPLORANDO,))
+        if self.estado not in permitidos or self.distancia_entre_miradas == 0:
             self.mirada.activa = False
             return False
-        if not self.mirada.activa and (
+        if not self.mirada.activa and not self.forzar_mirada and (
                 self.recorrido_desde_mirada < self.distancia_entre_miradas
                 or self.celdas_cubiertas <= self.cubiertas_en_ultima_mirada):
             return False
@@ -1046,6 +1038,7 @@ class Explorador(Node):
         self.momento_bloqueo_mirada = None
         if not self.mirada.activa:
             self.detener()
+            self.forzar_mirada = False
             self.mirada.iniciar(yaw, ahora)
             self.get_logger().info('Mirada de 360° por pasos.')
         cmd = Twist()
@@ -1142,6 +1135,9 @@ class Explorador(Node):
                 self.get_logger().info(
                     f'Objetivo de cobertura alcanzado: {porcentaje:.1f}% '
                     f'>= {self.porcentaje_objetivo:.1f}%.')
+        if self.estado in (ESTADO_EXPLORANDO, ESTADO_SIN_DESTINOS) and self.motivo_regreso:
+            self.estado = ESTADO_REGRESANDO
+            self.get_logger().info(f'Regreso a la largada: {self.motivo_regreso}.')
         if self.estado == ESTADO_REGRESANDO:
             self.regreso_pendiente = True
             if anterior != ESTADO_REGRESANDO:
@@ -1402,8 +1398,30 @@ class Explorador(Node):
 
     # ---------- control ----------
 
+    def recibir_victimas_completas(self, _msg):
+        if self.regresar_con_todas and not self.motivo_regreso:
+            self.motivo_regreso = 'todas las víctimas reportadas'
+
+    def revisar_reloj(self):
+        """Vuelve a la largada al vencer tiempo_regreso_s y evita quedar inmóvil."""
+        ahora = self.get_clock().now()
+        if (self.tiempo_regreso_s > 0 and self.momento_mapa is not None
+                and not self.motivo_regreso):
+            transcurrido = (ahora - self.momento_mapa).nanoseconds / 1e9
+            if transcurrido >= self.tiempo_regreso_s:
+                self.motivo_regreso = f'{transcurrido:.0f} s desde la publicación de /map'
+        if self.velocidad_ordenada > 0.01 or self.mirada.activa or self.momento_movimiento is None:
+            self.momento_movimiento = ahora
+        elif (self.estado in (ESTADO_EXPLORANDO, ESTADO_REGRESANDO) and self.espera_inmovil_s > 0
+              and (ahora - self.momento_movimiento).nanoseconds / 1e9 >= self.espera_inmovil_s):
+            if not self.forzar_mirada:
+                self.get_logger().warn(
+                    f'{self.espera_inmovil_s:.0f} s sin moverse: mirada para no quedar inmóvil.')
+            self.forzar_mirada = True
+
     def controlar(self):
         pose = self.obtener_pose_robot()
+        self.revisar_reloj()
         # Modo competencia: cuando hay mapa y el LiDAR lleva 5 s andando,
         # "hacemos el clic" de 2D Pose Estimate en el origen, una sola vez.
         if (self.confirmar_pose_automatica and not self.pose_auto_enviada
@@ -1424,6 +1442,10 @@ class Explorador(Node):
             self.actualizar_orientacion_huella(pose[2])
         estado_anterior = self.estado
         self.transicionar(pose)
+        if self.estado == ESTADO_TERMINADO and not self.done_publicado:
+            self.pub_done.publish(Empty())
+            self.done_publicado = True
+            self.get_logger().info('En la largada: publico /done.')
         if self.estado == ESTADO_TERMINADO and estado_anterior != ESTADO_TERMINADO:
             if self.futuro_plan is not None:
                 self.futuro_plan.cancel()
@@ -1435,8 +1457,7 @@ class Explorador(Node):
         self.pub_estado.publish(String(data=self.estado))
 
         if self.estado in (
-                ESTADO_INICIALIZANDO, ESTADO_TERMINADO, ESTADO_SIN_DESTINOS,
-                ESTADO_DESLIZAMIENTO) or pose is None:
+                ESTADO_INICIALIZANDO, ESTADO_TERMINADO, ESTADO_SIN_DESTINOS) or pose is None:
             if pose is None and self.estado == ESTADO_EXPLORANDO:
                 self.get_logger().warn(
                     'Frenado: no está disponible la transformación map -> base del robot.',

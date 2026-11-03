@@ -33,8 +33,6 @@ def generate_launch_description():
                               description='Porcentaje de celdas libres cubiertas para terminar'),
         DeclareLaunchArgument('confirmar_pose_automatica', default_value='false'),
         DeclareLaunchArgument('use_sim_time', default_value=config('simulacion')),
-        DeclareLaunchArgument('verificar_movimiento_simulado',
-                              default_value=config('simulacion')),
         DeclareLaunchArgument('world', default_value='laberinto_simple.world'),
         DeclareLaunchArgument('map', default_value=share(
             'yahboom_rosmaster_gazebo', 'maps', 'laberinto_simple.yaml')),
@@ -127,9 +125,7 @@ def generate_launch_description():
         parameters=[config('params_file'), clock, {
             'porcentaje_objetivo': ParameterValue(config('porcentaje_objetivo'), value_type=float),
             'confirmar_pose_automatica': ParameterValue(
-                    config('confirmar_pose_automatica'), value_type=bool),
-            'verificar_movimiento_simulado': ParameterValue(
-                config('verificar_movimiento_simulado'), value_type=bool)}],
+                    config('confirmar_pose_automatica'), value_type=bool)}],
         remappings=[('cmd_vel', config('cmd_vel_topic'))])
     rviz = Node(
         package='rviz2', executable='rviz2', name='rviz2', output='screen',

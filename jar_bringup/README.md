@@ -144,23 +144,12 @@ indicar desplazamiento aunque el chasis no avance. AMCL estima la corrección
 `map -> odom` usando el láser; la estimación puede divergir y la visualización
 por sí sola no demuestra movimiento real.
 
-Con `simulacion:=true`, `verificar_movimiento_simulado` se activa por defecto.
-El explorador compara desplazamientos relativos de `/ground_truth/odom` y de
-la pose estimada durante órdenes de traslación sostenidas. Si en 3 segundos
-el desplazamiento real es menor a 2 cm y el estimado supera 8 cm, frena y pasa
-a `bloqueado_deslizamiento`. Esta medición se usa solo como supervisión de la
-simulación; no publica TF ni sustituye la localización. La comparación descarta
-ventanas con pausas, retrocesos del reloj o huecos de datos mayores a 0.5 s.
-
-Antes de reanudar, resolver el atasco y corregir la pose con **2D Pose Estimate**.
-Si ya se acumuló cobertura con una pose incorrecta, reiniciar la prueba para
-no conservar esas marcas. Para hardware el supervisor está desactivado por
-defecto; al usar un simulador externo se puede activar con
-`verificar_movimiento_simulado:=true`.
+El explorador ya no compara contra la pose real de Gazebo (`ground truth`): el
+reglamento prohíbe usarla, y frenar la exploración en la competencia cuesta la
+corrida. Si las ruedas patinan sin avanzar, actúa el timeout sin avance.
 
 El seguimiento solo salta waypoints cuando el segmento hacia el siguiente
-permanece en el mapa inflado y no corta esquinas de obstáculos. La protección
-de deslizamiento no corrige por sí sola errores de AMCL, del mapa o del chasis.
+permanece en el mapa inflado y no corta esquinas de obstáculos. 
 
 ## Pasillos estrechos y control revisado
 

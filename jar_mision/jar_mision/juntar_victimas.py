@@ -1,5 +1,7 @@
 """Reporta en /victimas una posición por cada caja roja detectada."""
 
+import math
+
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -26,6 +28,11 @@ class JuntarVictimas(Node):
     grupos cuando /estado pasa a regresando_al_origen o terminado, cuando se
     cumple tiempo_limite_s o cuando llega un mensaje en reportar_victimas.
     Así un falso positivo temprano no gasta un reporte.
+
+    Con 'inmediato' reporta cada grupo apenas junta `detecciones_minimas`
+    (para el bono de rescate veloz) y, al cerrar, completa los reportes que
+    sobren con los mejores grupos restantes. Cuando ya reportó las
+    `victimas`, publica en victimas_completas para que el robot vuelva.
     """
 
     ESTADOS_FINALES = ('regresando_al_origen', 'terminado')
@@ -66,6 +73,7 @@ class JuntarVictimas(Node):
         self.create_subscription(String, 'estado', self.recibir_estado, 10)
         self.create_subscription(Empty, 'reportar_victimas', self.recibir_pedido, 10)
         self.pub = self.create_publisher(PointStamped, 'victimas', 10)
+        self.pub_completas = self.create_publisher(Empty, 'victimas_completas', 10)
         self.create_timer(1.0, self.revisar_tiempo)
 
     def posicion_robot(self):
@@ -105,7 +113,7 @@ class JuntarVictimas(Node):
 
     def cerrar(self, motivo):
         """Reporta una sola vez los mejores grupos acumulados."""
-        if self.cerrado or self.agrupador.inmediato:
+        if self.cerrado:
             return
         self.cerrado = True
         grupos = sorted(len(g['puntos']) for g in self.agrupador.grupos)[::-1]
@@ -116,6 +124,10 @@ class JuntarVictimas(Node):
             self.publicar(x, y, previos + i + 1)
 
     def publicar(self, x, y, numero):
+        if not (math.isfinite(x) and math.isfinite(y)):
+            # Un reporte con NaN o infinito se gasta y no suma (§7.2).
+            self.get_logger().error(f'Reporte descartado por no ser finito: ({x}, {y}).')
+            return
         punto = PointStamped()
         punto.header.frame_id = self.map_frame
         punto.header.stamp = self.get_clock().now().to_msg()
@@ -125,6 +137,8 @@ class JuntarVictimas(Node):
         self.get_logger().info(
             f'Víctima {numero}/{self.agrupador.victimas} '
             f'reportada en ({x:.2f}, {y:.2f}).')
+        if self.agrupador.publicados >= self.agrupador.victimas:
+            self.pub_completas.publish(Empty())
 
 
 def main(args=None):
