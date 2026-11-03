@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from jar_exploracion.trazado import trazar_rayo
+from jar_exploracion.trazado import celdas_visibles, trazar_rayo
 
 
 @pytest.mark.parametrize('destino', [(0, 0), (0, 5), (-5, 0), (5, 3), (-2, -5)])
@@ -137,3 +137,17 @@ def test_cobertura_no_atraviesa_esquina_diagonal(grilla):
     nodo.marcar_cobertura()
     assert nodo.cubierta[1, 0]
     assert not nodo.cubierta[2, 1]
+
+
+def test_celdas_visibles_corta_en_paredes_y_esquinas():
+    libre = np.ones((11, 11), dtype=bool)
+    libre[:, 6] = False                       # pared vertical
+    visibles = celdas_visibles(libre, [(5, 2)], 20.0)
+    assert visibles[5, 5] and visibles[0, 0]
+    assert not visibles[5, 6] and not visibles[5, 8]
+    # Diagonal entre dos celdas ocupadas que se tocan en una esquina.
+    libre = np.ones((5, 5), dtype=bool)
+    libre[1, 2] = libre[2, 1] = False
+    assert not celdas_visibles(libre, [(2, 2)], 5.0)[0, 0]
+    cerca = celdas_visibles(libre, [(2, 2)], 1.0)
+    assert cerca.sum() < celdas_visibles(libre, [(2, 2)], 5.0).sum()

@@ -1,5 +1,4 @@
 import math
-import time
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 
@@ -22,9 +21,10 @@ from visualization_msgs.msg import Marker
 
 from tf2_ros import Buffer, TransformListener
 
-from jar_exploracion.mirada import MiradaPorPasos, giro_seguro, radio_de_giro
+from jar_exploracion.mirada import (MiradaPorPasos, eje_mas_cercano, giro_seguro, normalizar,
+                                    radio_de_giro)
 from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
-from jar_exploracion.trazado import trazar_rayo
+from jar_exploracion.trazado import celdas_visibles
 from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
 from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espacio_transitable,
                                        puntos_scan, regular_traslacion)
@@ -35,6 +35,13 @@ ESPERA_MIRADA_S = 3.0
 # Sin destinos durante este tiempo, se vuelve al origen (y se reportan las
 # víctimas) en lugar de quedar detenido con zonas inalcanzables.
 ESPERA_SIN_DESTINOS_S = 10.0
+# Hasta este desvío (rad) respecto de un eje del mapa, la huella se calcula
+# alineada y el control corrige el giro: la deriva de las ruedas no cambia
+# el espacio libre en cada ciclo.
+TOLERANCIA_EJE = 0.1
+# Veces que una zona puede quedar sin punto de observación alcanzable antes
+# de descartarla: si el que la tapa es el scan, se libera; si son paredes, no.
+INTENTOS_ZONA_INALCANZABLE = 3
 
 ESTADO_INICIALIZANDO = 'inicializando'
 ESTADO_EXPLORANDO = 'explorando'
@@ -178,7 +185,7 @@ class Explorador(Node):
         # no hay nada nuevo que mirar y no se gira.
         self.cubiertas_en_ultima_mirada = -1
         self.momento_sin_destinos = None
-        self.ultima_posicion = None
+        self.posicion_ultima_mirada = None
         self.pose_inicial_confirmada = False
         self.momento_confirmacion = None
 
@@ -200,15 +207,14 @@ class Explorador(Node):
         self.zonas_sin_destino = set()
         self.puntos_observacion = {}
         self.observaciones_fallidas = {}
-        self.cursores_observacion = {}
         self.cache_busquedas = {}
         self.rondas_observacion = {}
         # Zonas cuya búsqueda de punto de observación terminó sin resultado.
         # A diferencia de zonas_sin_destino, no se vacía al cambiar la
         # orientación de la huella: solo con un mapa o una grilla nuevos.
         self.zonas_inobservables = set()
+        self.motivo_sin_observacion = None
         self.cache_zonas_alcanzables = {}
-        self.busqueda_pendiente = False
         self.estado = ESTADO_INICIALIZANDO
 
         self.objetivo_celda = None  # (fila, col) al que corresponde self.camino
@@ -276,7 +282,6 @@ class Explorador(Node):
         self.zonas_sin_destino.clear()
         self.puntos_observacion.clear()
         self.observaciones_fallidas.clear()
-        self.cursores_observacion.clear()
         self.cache_busquedas.clear()
         self.rondas_observacion.clear()
         self.zonas_inobservables.clear()
@@ -330,16 +335,17 @@ class Explorador(Node):
 
     def actualizar_orientacion_huella(self, yaw):
         """Recalcula el espacio libre si cambia significativamente la orientación."""
-        diferencia = math.atan2(math.sin(yaw - self.yaw_huella), math.cos(yaw - self.yaw_huella))
-        if abs(diferencia) < 0.03:
+        eje = eje_mas_cercano(yaw)
+        if abs(normalizar(yaw - eje)) <= TOLERANCIA_EJE:
+            yaw = eje
+        if abs(normalizar(yaw - self.yaw_huella)) < 0.03:
             return
         self.yaw_huella = yaw
-        self.libre_fino = self.espacio_libre(
-            self.datos_planificacion,
-            yaw - yaw_de_quaternion(self.info_mapa.origin.orientation))
+        yaw_mapa = yaw - yaw_de_quaternion(self.info_mapa.origin.orientation)
+        self.libre_fino = self.espacio_libre(self.datos_planificacion, yaw_mapa)
         self.componentes_libres, _ = nd.label(self.libre_fino)
         for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
-                      self.cursores_observacion, self.puntos_observacion):
+                      self.puntos_observacion):
             cache.clear()
         self.zonas_sin_destino.clear()
         self.camino = None
@@ -378,11 +384,10 @@ class Explorador(Node):
         distancia = nd.distance_transform_edt(datos == 0) * self.info_mapa.resolution
         self.costo_fino = 100.0 * np.exp(-(distancia ** 2) / (2.0 * self.sigma_costo ** 2))
         self.componentes_libres, _ = nd.label(libres)
-        for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
-                      self.cursores_observacion, self.puntos_observacion):
-            cache.clear()
-        self.zonas_sin_destino.clear()
-        # Ningún resultado calculado con el mapa anterior puede reutilizarse.
+        # Los obstáculos del scan aparecen y vencen todo el tiempo: la búsqueda
+        # de observación conserva su progreso y comprueba el alcance al usarlo.
+        # Las zonas alcanzables dependen de las etiquetas, que cambian.
+        self.cache_zonas_alcanzables.clear()
         if self.futuro_plan is not None:
             self.futuro_plan.cancel()
         self.futuro_plan = None
@@ -407,7 +412,6 @@ class Explorador(Node):
             self.zonas_sin_destino.clear()
             self.puntos_observacion.clear()
             self.observaciones_fallidas.clear()
-            self.cursores_observacion.clear()
             self.cache_busquedas.clear()
             self.rondas_observacion.clear()
             self.zonas_inobservables.clear()
@@ -463,7 +467,6 @@ class Explorador(Node):
         self.zonas_sin_destino.clear()
         self.puntos_observacion.clear()
         self.observaciones_fallidas.clear()
-        self.cursores_observacion.clear()
         self.cache_busquedas.clear()
         self.rondas_observacion.clear()
         self.zonas_inobservables.clear()
@@ -471,7 +474,7 @@ class Explorador(Node):
         self.pose_inicial_confirmada = True
         self.momento_confirmacion = self.get_clock().now()
         self.mirada.activa = False
-        self.ultima_posicion = None
+        self.posicion_ultima_mirada = None
         if self.estado != ESTADO_INICIALIZANDO:
             self.estado = ESTADO_INICIALIZANDO
             self.camino = None
@@ -735,9 +738,17 @@ class Explorador(Node):
         return f'{posicion}, celda={celda}: {motivo}'
 
     def punto_para_observar(self, zona, x, y):
-        """Busca un destino alcanzable con vista a una celda libre de la zona."""
-        self.busqueda_pendiente = False
-        comienzo = time.monotonic()
+        """
+        Busca un destino alcanzable con vista a una celda libre de la zona.
+
+        La visibilidad sale del mapa, así que se calcula una sola vez por zona
+        lanzando rayos desde la zona; el alcance se comprueba en cada llamada
+        porque cambia con los obstáculos del scan. Si devuelve None,
+        `motivo_sin_observacion` dice si la zona no se ve desde ningún lado
+        ('invisible') o si ahora no se llega a ningún punto que la vea
+        ('inalcanzable').
+        """
+        self.motivo_sin_observacion = 'inalcanzable'
         inicio = self.celda_fina_segura(x, y)
         if inicio is None or not self.libre_fino[inicio]:
             return None
@@ -749,73 +760,60 @@ class Explorador(Node):
             if celda is not None and alcanzable[celda]:
                 return punto
         alcance = self.ultimo_scan.range_max if self.ultimo_scan is not None else 0.0
-        clave = (zona, int(etiquetas[inicio]), alcance)
+        # Se usa el alcance medido del láser, sin suponer visibilidad a través de paredes.
+        if not math.isfinite(alcance) or alcance <= 0:
+            return None
+        clave = (zona, alcance)
         if clave not in self.cache_busquedas:
-            centro = self.celda_a_mundo(*zona, self.info_grilla)
-            f0, c0 = self.celda_de(*centro, self.info_mapa)
-            radio = math.ceil(self.info_grilla.resolution / self.info_mapa.resolution) + 1
-            alto, ancho = self.libre_fino.shape
-            blancos = []
-            for f in range(max(0, f0 - radio), min(alto, f0 + radio + 1)):
-                for c in range(max(0, c0 - radio), min(ancho, c0 + radio + 1)):
-                    if self.datos_mapa[f, c] != 0:
-                        continue
-                    punto = self.celda_a_mundo(f, c, self.info_mapa)
-                    if self.celda_de(*punto, self.info_grilla) == zona:
-                        blancos.append((f, c))
-            if not blancos:
-                return None
-            # Se usa el alcance medido del láser, sin suponer visibilidad a través de paredes.
-            if not math.isfinite(alcance) or alcance <= 0:
-                return None
-            candidatos = np.argwhere(alcanzable)
-            distancias = (candidatos[:, 0] - f0)**2 + (candidatos[:, 1] - c0)**2
-            # Fuera del alcance de toda la zona no puede haber una vista válida.
-            cerca = distancias <= (alcance / self.info_mapa.resolution + radio)**2
-            candidatos = candidatos[cerca]
-            distancias = distancias[cerca]
-            orden = np.argsort(distancias)
-            if len(self.cache_busquedas) >= 8:
-                self.cache_busquedas.pop(next(iter(self.cache_busquedas)))
-            self.cache_busquedas[clave] = (blancos, candidatos, orden)
-        blancos, candidatos, orden = self.cache_busquedas[clave]
+            self.cache_busquedas[clave] = self.candidatos_de_observacion(zona, alcance)
+        candidatos = self.cache_busquedas[clave]
+        if not len(candidatos):
+            self.motivo_sin_observacion = 'invisible'
+            return None
+        candidatos = candidatos[alcanzable[candidatos[:, 0], candidatos[:, 1]]]
+        if not len(candidatos):
+            return None
         fallidos = self.observaciones_fallidas.get(zona, [])
-        comienzo = time.monotonic()
-        desde = self.cursores_observacion.get(clave, 0)
-        for posicion in range(desde, len(orden)):
-            if posicion > desde and time.monotonic() - comienzo >= 0.025:
-                self.cursores_observacion[clave] = posicion
-                self.busqueda_pendiente = True
-                return None
-            if posicion - desde >= 128:
-                self.cursores_observacion[clave] = posicion
-                self.busqueda_pendiente = True
-                return None
-            indice = orden[posicion]
-            f, c = map(int, candidatos[indice])
-            punto = self.celda_a_mundo(f, c, self.info_mapa)
+        for f, c in candidatos:
+            punto = self.celda_a_mundo(int(f), int(c), self.info_mapa)
             if math.hypot(punto[0] - x, punto[1] - y) < 0.25:
                 continue
-            if any(math.hypot(punto[0] - px, punto[1] - py) < 0.25
-                   for px, py in fallidos):
+            # Hay puntos lejanos que la ven: si todos fallaron antes, se descarta.
+            self.motivo_sin_observacion = 'invisible'
+            if any(math.hypot(punto[0] - px, punto[1] - py) < 0.25 for px, py in fallidos):
                 continue
-            for blanco in blancos:
-                if math.hypot(f - blanco[0], c - blanco[1]) * self.info_mapa.resolution > alcance:
-                    continue
-                rayo = trazar_rayo(f, c, *blanco)
-                if not all(self.datos_mapa[celda] == 0 for celda in rayo):
-                    continue
-                # Tampoco permitir visibilidad diagonal entre dos paredes.
-                if any(a[0] != b[0] and a[1] != b[1] and (
-                        self.datos_mapa[a[0], b[1]] != 0
-                        or self.datos_mapa[b[0], a[1]] != 0)
-                       for a, b in zip(rayo, rayo[1:])):
-                    continue
-                self.puntos_observacion[zona] = punto
-                self.cursores_observacion.pop(clave, None)
-                return punto
-        self.cursores_observacion.pop(clave, None)
+            self.puntos_observacion[zona] = punto
+            return punto
         return None
+
+    def candidatos_de_observacion(self, zona, alcance):
+        """Celdas libres del mapa con vista a la zona, de la más cercana a la más lejana."""
+        centro = self.celda_a_mundo(*zona, self.info_grilla)
+        f0, c0 = self.celda_de(*centro, self.info_mapa)
+        radio = math.ceil(self.info_grilla.resolution / self.info_mapa.resolution) + 1
+        alto, ancho = self.datos_mapa.shape
+        blancos = []
+        for f in range(max(0, f0 - radio), min(alto, f0 + radio + 1)):
+            for c in range(max(0, c0 - radio), min(ancho, c0 + radio + 1)):
+                if self.datos_mapa[f, c] != 0:
+                    continue
+                punto = self.celda_a_mundo(f, c, self.info_mapa)
+                if self.celda_de(*punto, self.info_grilla) == zona:
+                    blancos.append((f, c))
+        if not blancos:
+            return np.zeros((0, 2), dtype=np.int64)
+        # Unos pocos orígenes repartidos por la zona alcanzan para verla.
+        muestras = [blancos[i] for i in np.linspace(0, len(blancos) - 1,
+                                                    min(9, len(blancos))).astype(int)]
+        # Más allá de la diagonal del mapa los rayos ya salieron: no hace falta seguir.
+        largo_rayo = min(alcance / self.info_mapa.resolution, math.hypot(alto, ancho))
+        visibles = celdas_visibles(self.datos_mapa == 0, muestras, largo_rayo)
+        candidatos = np.argwhere(visibles)
+        orden = np.argsort((candidatos[:, 0] - f0)**2 + (candidatos[:, 1] - c0)**2,
+                           kind='stable')
+        if len(self.cache_busquedas) >= 64:
+            self.cache_busquedas.pop(next(iter(self.cache_busquedas)))
+        return candidatos[orden]
 
     def zona_descartada(self, zona):
         """Sin destino conocido o sin punto de observación posible."""
@@ -971,9 +969,12 @@ class Explorador(Node):
         """
         x, y, yaw = pose
         ahora = self.get_clock().now().nanoseconds / 1e9
-        if self.ultima_posicion is not None and not self.mirada.activa:
-            self.recorrido_desde_mirada += math.dist((x, y), self.ultima_posicion)
-        self.ultima_posicion = (x, y)
+        if self.posicion_ultima_mirada is None:
+            self.posicion_ultima_mirada = (x, y)
+        if not self.mirada.activa:
+            # En línea recta desde la última vuelta: sumar cada paso acumulaba
+            # el temblor de la pose y el robot giraba casi sin moverse.
+            self.recorrido_desde_mirada = math.dist((x, y), self.posicion_ultima_mirada)
         if self.estado != ESTADO_EXPLORANDO or self.distancia_entre_miradas == 0:
             self.mirada.activa = False
             return False
@@ -997,6 +998,7 @@ class Explorador(Node):
             self.mirada.activa = False
             self.momento_bloqueo_mirada = None
             self.recorrido_desde_mirada = 0.0
+            self.posicion_ultima_mirada = (x, y)
             self.cubiertas_en_ultima_mirada = self.celdas_cubiertas
             self.seguimiento_avance = None
             self.get_logger().warn(
@@ -1012,6 +1014,7 @@ class Explorador(Node):
         cmd.angular.z = self.mirada.actualizar(yaw, ahora)
         if not self.mirada.activa:
             self.recorrido_desde_mirada = 0.0
+            self.posicion_ultima_mirada = (x, y)
             self.cubiertas_en_ultima_mirada = self.celdas_cubiertas
             mensajes = {
                 'completa': 'Mirada completa.',
@@ -1148,7 +1151,8 @@ class Explorador(Node):
             fila_r_gruesa, col_r_gruesa = self.celda_de(x_r, y_r, self.info_grilla)
 
             celda_robot = self.celda_fina_segura(x_r, y_r)
-            componente = self.componentes_libres[celda_robot] if celda_robot is not None else 0
+            componente = (self.componentes_libres[celda_robot]
+                          if celda_robot is not None else 0)
             preferidas = self.zonas_alcanzables(componente)
             objetivo_grueso = self.objetivo_de_la_mision(
                 fila_r_gruesa, col_r_gruesa, preferidas)
@@ -1187,16 +1191,23 @@ class Explorador(Node):
                 if objetivo_grueso not in self.puntos_observacion:
                     self.detener()
                 objetivo_mundo = self.punto_para_observar(objetivo_grueso, x_r, y_r)
-                if self.busqueda_pendiente:
-                    # Se sigue con la misma zona hasta terminar, con el robot
-                    # quieto: ceder el turno a otra zona lejana hacía que el
-                    # robot fuera y viniera entre zonas sin punto de observación.
-                    self.get_logger().info(
-                        f'Buscando punto de observación para {objetivo_grueso} por etapas.',
-                        throttle_duration_sec=10.0)
-                    self.camino = None
-                    self.publicar_camino([])
-                    return
+            if objetivo_mundo is None and self.motivo_sin_observacion == 'inalcanzable':
+                intentos = self.rondas_observacion.get(objetivo_grueso, 0) + 1
+                self.rondas_observacion[objetivo_grueso] = intentos
+                if intentos >= INTENTOS_ZONA_INALCANZABLE:
+                    self.motivo_sin_observacion = 'invisible'
+            if objetivo_mundo is None and self.motivo_sin_observacion == 'inalcanzable':
+                # Hay lugares que la ven, pero ahora no se llega (por ejemplo,
+                # el scan encierra al robot): reintentar, no descartar.
+                self.objetivos_pendientes[objetivo_grueso] = (
+                    self.get_clock().now().nanoseconds / 1e9 + self.reintento_objetivo_s)
+                self.get_logger().info(
+                    f'Zona {objetivo_grueso}: ningún punto que la ve es alcanzable ahora; '
+                    'se reintenta más tarde.', throttle_duration_sec=10.0)
+                self.camino = None
+                self.publicar_camino([])
+                self.detener()
+                return
             if objetivo_mundo is None:
                 self.zonas_sin_destino.add(objetivo_grueso)
                 self.zonas_inobservables.add(objetivo_grueso)
@@ -1276,6 +1287,11 @@ class Explorador(Node):
         cmd = Twist()
         cmd.linear.x = vx
         cmd.linear.y = vy
+        # Corrige la deriva del giro para seguir alineado con el mapa; desvíos
+        # mayores (una mirada abandonada) no se corrigen girando junto a paredes.
+        error = normalizar(eje_mas_cercano(yaw_r) - yaw_r)
+        if abs(error) <= TOLERANCIA_EJE:
+            cmd.angular.z = max(-0.2, min(0.2, 1.0 * error))
         self.velocidad_ordenada = math.hypot(vx, vy)
         self.pub_cmd_vel.publish(cmd)
 

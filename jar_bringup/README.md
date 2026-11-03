@@ -234,21 +234,27 @@ del láser en el límite). Si algo entra más, el robot espera quieto hasta 3 s 
 retoma donde quedó; antes cortaba y volvía a empezar 360° desde cero, y al arrancar
 daba varias vueltas. Si sigue bloqueado, abandona la mirada hasta el próximo tramo.
 
-Además del tramo de 1.5 m, hace falta que el porcentaje cubierto haya subido desde la
+Los 1.5 m se miden en línea recta desde la última vuelta (sumar cada paso acumulaba
+el temblor de la pose) y además hace falta que el porcentaje cubierto haya subido desde la
 última vuelta: si el robot solo pasó por zonas ya vistas, no hay nada nuevo que
 mirar y no gira.
 
 ### Zonas sin punto de observación
 
-Una zona sin destino directo busca por etapas (unos milisegundos por ciclo) un punto
-desde donde verla, con el robot quieto, hasta terminar. Antes, si tardaba, cedía el
-turno a la zona más cercana con menos intentos, que podía estar del otro lado del
-laberinto: el robot iba y venía entre zonas que nunca iba a poder ver. Si la
-búsqueda termina sin punto, la zona queda en `zonas_inobservables` hasta que llegue
-un mapa o una grilla nuevos; antes el descarte se borraba cada vez que cambiaba la
-orientación del robot. Si todas las zonas que quedan están descartadas durante
-10 s, el robot vuelve al origen con el porcentaje que tenga, y en ese momento se
-reportan las víctimas.
+Para una zona sin destino directo, el explorador lanza rayos desde la zona sobre el
+mapa (`celdas_visibles`) y elige la celda alcanzable más cercana que la ve. Se calcula
+una vez por zona, en milisegundos; antes probaba candidato por candidato durante varios
+ciclos, tardaba minutos con la simulación lenta y, al ceder el turno a otras zonas,
+el robot iba y venía de una punta a la otra del laberinto.
+
+- Si ningún punto ve la zona, queda en `zonas_inobservables` hasta un mapa nuevo.
+- Si hay puntos que la ven pero ahora no se llega (el scan encierra al robot), se
+  reintenta a los 10 s; después de 3 intentos se descarta.
+- La huella se calcula alineada con el eje del mapa más cercano (hasta 0.1 rad de
+  desvío) y el control corrige el giro: la deriva de las ruedas ya no recalcula el
+  espacio libre en cada ciclo. Los obstáculos del scan tampoco borran lo ya buscado.
+- Si todas las zonas que quedan están descartadas durante 10 s, el robot vuelve al
+  origen con el porcentaje que tenga, y en ese momento se reportan las víctimas.
 
 ## Obstáculos que no están en el mapa
 

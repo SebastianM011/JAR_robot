@@ -407,14 +407,14 @@ def preparar_mirada(nodo, ancho_pasillo=None):
     tf = TransformStamped()
     tf.transform.rotation.w = 1.0
     buffer.lookup_transform_full.return_value = tf
-    # Mirada vencida: ya recorrió un tramo.
-    n.recorrido_desde_mirada = n.distancia_entre_miradas
+    # Mirada vencida: la última vuelta fue a un tramo de distancia.
+    n.posicion_ultima_mirada = (0.5 - n.distancia_entre_miradas, 0.5)
     return n
 
 
 def test_no_gira_al_empezar_a_explorar(nodo):
     n = preparar_mirada(nodo)
-    n.recorrido_desde_mirada = 0.0
+    n.posicion_ultima_mirada = None
     assert not n.mirar_alrededor((0.5, 0.5, 0.0))
     assert not n.mirada.activa
 
@@ -556,7 +556,38 @@ def test_mirada_solo_si_hubo_cobertura_nueva(nodo):
     """Tras 1.5 m sin cubrir celdas nuevas no hace falta girar."""
     n = preparar_mirada(nodo)
     n.cubiertas_en_ultima_mirada = n.celdas_cubiertas
-    n.recorrido_desde_mirada = n.distancia_entre_miradas
     assert not n.mirar_alrededor((0.5, 0.5, 0.0))
     n.celdas_cubiertas += 1
     assert n.mirar_alrededor((0.5, 0.5, 0.0))
+
+
+def test_deriva_de_giro_no_reinicia_la_busqueda_de_observacion(nodo):
+    """Unos grados de desvío respecto del eje no recalculan el espacio libre."""
+    n = preparar_mirada(nodo)
+    libre = n.libre_fino
+    n.puntos_observacion[(1, 1)] = (0.5, 0.5)
+    n.actualizar_orientacion_huella(0.05)
+    assert n.libre_fino is libre
+    assert n.puntos_observacion == {(1, 1): (0.5, 0.5)}
+    n.actualizar_orientacion_huella(math.pi / 2)
+    assert n.libre_fino is not libre
+
+
+def test_obstaculos_del_scan_no_borran_la_busqueda_de_observacion(nodo):
+    """Un impacto nuevo cambia el espacio libre sin perder lo ya buscado."""
+    n = preparar_mirada(nodo)
+    n.puntos_observacion[(1, 1)] = (0.5, 0.5)
+    n.cache_busquedas[((1, 1), 10.0)] = np.array([[5, 5]])
+    n.actualizar_obstaculos((0.5, 0.5, 0.0), np.array([[0.2, 0.0]]))
+    assert not n.libre_fino[n.celda_fina_segura(0.7, 0.5)]
+    assert n.puntos_observacion == {(1, 1): (0.5, 0.5)}
+    assert ((1, 1), 10.0) in n.cache_busquedas
+
+
+def test_el_temblor_de_la_pose_no_suma_recorrido(nodo):
+    """Ir y venir un centímetro muchas veces no cuenta como un tramo."""
+    n = preparar_mirada(nodo)
+    n.posicion_ultima_mirada = None
+    for i in range(400):
+        assert not n.mirar_alrededor((0.5 + 0.01 * (i % 2), 0.5, 0.0))
+    assert n.recorrido_desde_mirada < 0.02

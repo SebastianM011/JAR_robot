@@ -92,7 +92,7 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     assert nodo.estado == ESTADO_TERMINADO
 
 
-def test_observar_zona_sin_entrar_y_sin_atravesar_pared(monkeypatch):
+def test_observar_zona_sin_entrar_y_sin_atravesar_pared():
     """El punto pertenece al componente del robot y tiene visión libre."""
     from types import SimpleNamespace
 
@@ -110,7 +110,6 @@ def test_observar_zona_sin_entrar_y_sin_atravesar_pared(monkeypatch):
     from scipy import ndimage
 
     nodo.componentes_libres, _ = ndimage.label(nodo.libre_fino)
-    nodo.cursores_observacion = {}
     nodo.cache_busquedas = {}
     nodo.ultimo_scan = SimpleNamespace(range_max=2.0)
     nodo.puntos_observacion = {}
@@ -120,24 +119,28 @@ def test_observar_zona_sin_entrar_y_sin_atravesar_pared(monkeypatch):
     celda = nodo.celda_de(*punto, nodo.info_mapa)
     assert nodo.libre_fino[celda]
     assert celda[1] < 4
+    # Robot encerrado (por ejemplo por el scan): la zona se ve, pero no se llega.
+    nodo.puntos_observacion.clear()
+    libre = nodo.libre_fino.copy()
+    nodo.libre_fino = np.zeros((10, 10), dtype=bool)
+    nodo.libre_fino[1, 1] = True
+    nodo.componentes_libres, _ = ndimage.label(nodo.libre_fino)
+    assert nodo.punto_para_observar((2, 3), 0.15, 0.15) is None
+    assert nodo.motivo_sin_observacion == 'inalcanzable'
+    nodo.libre_fino = libre
+    nodo.componentes_libres, _ = ndimage.label(nodo.libre_fino)
+    # Con una pared nueva (y el caché vacío, como al recibir un mapa) solo se ve
+    # desde el otro lado, adonde el robot no llega.
     nodo.datos_mapa[:, 5] = 100
     nodo.puntos_observacion.clear()
+    nodo.cache_busquedas.clear()
     assert nodo.punto_para_observar((2, 3), 0.15, 0.15) is None
-    # Forzar el presupuesto temporal: debe continuar sin volver al inicio.
-    import itertools
-    from jar_exploracion import explorador
-
-    tiempos = itertools.count(step=0.03)
-    monkeypatch.setattr(explorador.time, 'monotonic', lambda: next(tiempos))
-    intentos = 0
-    while True:
-        assert nodo.punto_para_observar((2, 3), 0.15, 0.15) is None
-        intentos += 1
-        if not nodo.busqueda_pendiente:
-            break
-        assert intentos < 100
-    assert intentos > 1
-    assert nodo.cursores_observacion == {}
+    assert nodo.motivo_sin_observacion == 'inalcanzable'
+    # Sin celdas libres en la zona no se ve desde ningún lado.
+    nodo.datos_mapa[:, 4:] = 100
+    nodo.cache_busquedas.clear()
+    assert nodo.punto_para_observar((2, 3), 0.15, 0.15) is None
+    assert nodo.motivo_sin_observacion == 'invisible'
 
 
 def test_velocidad_segun_recorrido_restante():
