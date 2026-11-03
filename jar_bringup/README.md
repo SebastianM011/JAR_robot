@@ -234,6 +234,19 @@ del láser en el límite). Si algo entra más, el robot espera quieto hasta 3 s 
 retoma donde quedó; antes cortaba y volvía a empezar 360° desde cero, y al arrancar
 daba varias vueltas. Si sigue bloqueado, abandona la mirada hasta el próximo tramo.
 
+Además del tramo de 1.5 m, hace falta que el porcentaje cubierto haya subido desde la
+última vuelta: si el robot solo pasó por zonas ya vistas, no hay nada nuevo que
+mirar y no gira.
+
+### Zonas sin punto de observación
+
+Una zona sin destino directo busca por etapas un punto desde donde verla y, si tarda,
+cede el turno a otras zonas. Con dos zonas difíciles en puntas opuestas del mapa,
+el robot iba y venía entre ellas sin terminar. Ahora cada zona tiene 2 rondas de
+búsqueda (`RONDAS_MAXIMAS_OBSERVACION`); después se descarta hasta que cambie el
+mapa. Si todas las zonas que quedan están descartadas durante 10 s, el robot vuelve
+al origen con el porcentaje que tenga, y en ese momento se reportan las víctimas.
+
 ## Obstáculos que no están en el mapa
 
 El explorador marca como obstáculo temporal (8 s) cada impacto del scan en una celda

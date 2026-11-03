@@ -541,3 +541,13 @@ def test_mirada_bloqueada_se_abandona_y_no_reinicia_enseguida(nodo, monkeypatch)
     monkeypatch.setattr(explorador, 'giro_seguro', lambda *args: True)
     assert not n.mirar_alrededor((0.5, 0.5, 1.0))
     assert not n.mirada.activa
+
+
+def test_mirada_solo_si_hubo_cobertura_nueva(nodo):
+    """Tras 1.5 m sin cubrir celdas nuevas no hace falta girar."""
+    n = preparar_mirada(nodo)
+    n.cubiertas_en_ultima_mirada = n.celdas_cubiertas
+    n.recorrido_desde_mirada = n.distancia_entre_miradas
+    assert not n.mirar_alrededor((0.5, 0.5, 0.0))
+    n.celdas_cubiertas += 1
+    assert n.mirar_alrededor((0.5, 0.5, 0.0))

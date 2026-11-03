@@ -71,6 +71,11 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.celdas_cubiertas = 0
     nodo.porcentaje_objetivo = 95.0
     nodo.zonas_sin_destino = {(0, 0)}
+    nodo.rondas_observacion = {}
+    nodo.momento_sin_destinos = None
+    reloj = Mock()
+    reloj.now.return_value.nanoseconds = 0
+    nodo.get_clock = lambda: reloj
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_SIN_DESTINOS
     assert nodo.no_cubiertas[0, 0]
@@ -275,3 +280,43 @@ def test_objetivo_persistente_hasta_cubrir_o_rechazar():
     nodo.zonas_sin_destino.add((0, 0))
     assert nodo.celda_no_cubierta_mas_cercana(0, 0, preferidas) is None
     assert nodo.objetivo_mision is None
+
+
+def test_zonas_agotadas_se_descartan_y_sin_destinos_se_regresa():
+    """Dos rondas sin punto de observación descartan la zona; sin destinos, vuelve."""
+    from unittest.mock import Mock
+    from jar_exploracion import explorador
+    from jar_exploracion.explorador import ESTADO_EXPLORANDO, ESTADO_REGRESANDO
+
+    nodo = Explorador.__new__(Explorador)
+    nodo.get_logger = lambda: Mock()
+    reloj = Mock()
+    reloj.now.return_value.nanoseconds = 0
+    nodo.get_clock = lambda: reloj
+    nodo.reintento_objetivo_s = 10.0
+    nodo.objetivos_pendientes = {}
+    nodo.turnos_busqueda = {}
+    nodo.rondas_observacion = {}
+    nodo.zonas_sin_destino = set()
+    zona = (0, 0)
+    for _ in range(10 * explorador.RONDAS_MAXIMAS_OBSERVACION):
+        nodo.ceder_turno_busqueda(zona)
+    assert nodo.zona_descartada(zona)
+
+    nodo.estado = ESTADO_EXPLORANDO
+    nodo.no_cubiertas = np.array([[True, False]])
+    nodo.total_celdas_libres = 2
+    nodo.celdas_cubiertas = 1
+    nodo.porcentaje_objetivo = 95.0
+    nodo.momento_sin_destinos = None
+    nodo.futuro_plan = None
+    nodo.publicar_camino = Mock()
+    nodo.detener = Mock()
+    nodo.origen = (5.0, 5.0)
+    nodo.regreso_pendiente = False
+    nodo.transicionar((0., 0., 0.))
+    nodo.transicionar((0., 0., 0.))
+    assert nodo.estado != ESTADO_REGRESANDO
+    reloj.now.return_value.nanoseconds = int(explorador.ESPERA_SIN_DESTINOS_S * 1e9)
+    nodo.transicionar((0., 0., 0.))
+    assert nodo.estado == ESTADO_REGRESANDO

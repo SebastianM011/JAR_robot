@@ -32,6 +32,12 @@ from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espac
 FRECUENCIA_HZ = 10.0
 HOLGURA_MIRADA = 0.02
 ESPERA_MIRADA_S = 3.0
+# Rondas de búsqueda de punto de observación antes de descartar una zona:
+# sin límite, dos zonas difíciles se ceden el turno y el robot va y viene.
+RONDAS_MAXIMAS_OBSERVACION = 2
+# Sin destinos durante este tiempo, se vuelve al origen (y se reportan las
+# víctimas) en lugar de quedar detenido con zonas inalcanzables.
+ESPERA_SIN_DESTINOS_S = 10.0
 
 ESTADO_INICIALIZANDO = 'inicializando'
 ESTADO_EXPLORANDO = 'explorando'
@@ -170,6 +176,10 @@ class Explorador(Node):
         # (ruido del scan en el límite) no corta la vuelta; si entra más, el
         # robot espera quieto hasta ESPERA_MIRADA_S sin perder lo girado.
         self.momento_bloqueo_mirada = None
+        # Celdas cubiertas al terminar la última mirada: sin cobertura nueva
+        # no hay nada nuevo que mirar y no se gira.
+        self.cubiertas_en_ultima_mirada = -1
+        self.momento_sin_destinos = None
         self.ultima_posicion = None
         self.pose_inicial_confirmada = False
         self.momento_confirmacion = None
@@ -533,7 +543,8 @@ class Explorador(Node):
     def celda_no_cubierta_mas_cercana(self, fila_r: int, col_r: int, preferidas=None):
         """Conserva un objetivo válido y prioriza nuevas zonas alcanzables."""
         candidatas = self.no_cubiertas.copy()
-        for celda in self.zonas_sin_destino:
+        for celda in set(self.zonas_sin_destino) | {
+                z for z in self.rondas_observacion if self.zona_agotada(z)}:
             if (0 <= celda[0] < candidatas.shape[0]
                     and 0 <= celda[1] < candidatas.shape[1]):
                 candidatas[celda] = False
@@ -816,7 +827,18 @@ class Explorador(Node):
             self.get_clock().now().nanoseconds / 1e9 + self.reintento_objetivo_s)
         self.turnos_busqueda[zona] = 0
         self.rondas_observacion[zona] = self.rondas_observacion.get(zona, 0) + 1
+        if self.zona_agotada(zona):
+            self.get_logger().warn(
+                f'Zona {zona}: {RONDAS_MAXIMAS_OBSERVACION} rondas sin punto de observación; '
+                'se descarta hasta que cambie el mapa. Sigue sin cubrir.')
         return True
+
+    def zona_agotada(self, zona):
+        return self.rondas_observacion.get(zona, 0) >= RONDAS_MAXIMAS_OBSERVACION
+
+    def zona_descartada(self, zona):
+        """Sin destino conocido o con todas sus rondas de búsqueda gastadas."""
+        return zona in self.zonas_sin_destino or self.zona_agotada(zona)
 
     def calcular_camino(self, libres, costos, inicio, objetivo):
         """Ejecuta solo cálculo numérico fuera del executor ROS y reutiliza el grafo."""
@@ -974,7 +996,9 @@ class Explorador(Node):
         if self.estado != ESTADO_EXPLORANDO or self.distancia_entre_miradas == 0:
             self.mirada.activa = False
             return False
-        if not self.mirada.activa and self.recorrido_desde_mirada < self.distancia_entre_miradas:
+        if not self.mirada.activa and (
+                self.recorrido_desde_mirada < self.distancia_entre_miradas
+                or self.celdas_cubiertas <= self.cubiertas_en_ultima_mirada):
             return False
         impactos = self.impactos_en_base()
         radio = self.radio_giro - (HOLGURA_MIRADA if self.mirada.activa else 0.0)
@@ -992,6 +1016,7 @@ class Explorador(Node):
             self.mirada.activa = False
             self.momento_bloqueo_mirada = None
             self.recorrido_desde_mirada = 0.0
+            self.cubiertas_en_ultima_mirada = self.celdas_cubiertas
             self.seguimiento_avance = None
             self.get_logger().warn(
                 'Mirada abandonada: hay algo dentro del radio de giro; '
@@ -1006,6 +1031,7 @@ class Explorador(Node):
         cmd.angular.z = self.mirada.actualizar(yaw, ahora)
         if not self.mirada.activa:
             self.recorrido_desde_mirada = 0.0
+            self.cubiertas_en_ultima_mirada = self.celdas_cubiertas
             mensajes = {
                 'completa': 'Mirada completa.',
                 'alineada_por_tiempo': 'Mirada cortada por tiempo; robot alineado con el mapa.',
@@ -1036,7 +1062,7 @@ class Explorador(Node):
                     and not np.any(self.no_cubiertas)):
                 self.estado = ESTADO_REGRESANDO
             elif self.no_cubiertas is not None and any(
-                    (int(f), int(c)) not in self.zonas_sin_destino
+                    not self.zona_descartada((int(f), int(c)))
                     for f, c in zip(*np.where(self.no_cubiertas))):
                 self.estado = ESTADO_EXPLORANDO
         if self.estado == ESTADO_INICIALIZANDO:
@@ -1068,7 +1094,7 @@ class Explorador(Node):
             ):
                 self.estado = ESTADO_REGRESANDO
             elif self.no_cubiertas is not None and all(
-                    (int(f), int(c)) in self.zonas_sin_destino
+                    self.zona_descartada((int(f), int(c)))
                     for f, c in zip(*np.where(self.no_cubiertas))):
                 self.estado = ESTADO_SIN_DESTINOS
                 self.get_logger().warn(
@@ -1076,6 +1102,17 @@ class Explorador(Node):
                     'ni puntos de observación seguros. No es cobertura completa. '
                     'Se reconsiderarán si cambia el mapa o la grilla.')
 
+        if self.estado == ESTADO_SIN_DESTINOS:
+            ahora = self.get_clock().now().nanoseconds / 1e9
+            if self.momento_sin_destinos is None:
+                self.momento_sin_destinos = ahora
+            elif ahora - self.momento_sin_destinos >= ESPERA_SIN_DESTINOS_S:
+                self.estado = ESTADO_REGRESANDO
+                porcentaje = self.porcentaje_cobertura() or 0.0
+                self.get_logger().warn(
+                    f'Sin destinos alcanzables: regreso al origen con {porcentaje:.1f}% cubierto.')
+        else:
+            self.momento_sin_destinos = None
         if self.estado in (ESTADO_EXPLORANDO, ESTADO_SIN_DESTINOS):
             porcentaje = self.porcentaje_cobertura()
             if porcentaje is not None and porcentaje + 1e-9 >= self.porcentaje_objetivo:
