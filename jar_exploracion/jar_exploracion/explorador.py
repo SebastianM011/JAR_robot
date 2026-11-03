@@ -32,9 +32,6 @@ from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espac
 FRECUENCIA_HZ = 10.0
 HOLGURA_MIRADA = 0.02
 ESPERA_MIRADA_S = 3.0
-# Rondas de búsqueda de punto de observación antes de descartar una zona:
-# sin límite, dos zonas difíciles se ceden el turno y el robot va y viene.
-RONDAS_MAXIMAS_OBSERVACION = 2
 # Sin destinos durante este tiempo, se vuelve al origen (y se reportan las
 # víctimas) en lugar de quedar detenido con zonas inalcanzables.
 ESPERA_SIN_DESTINOS_S = 10.0
@@ -170,8 +167,9 @@ class Explorador(Node):
             raise ValueError('distancia_entre_miradas y pasos_mirada no pueden ser negativos')
         self.radio_giro = radio_de_giro(
             self.largo_robot, self.ancho_robot, self.margen_seguridad)
-        # Arranca vencido: la primera mirada es al empezar a explorar.
-        self.recorrido_desde_mirada = math.inf
+        # Sin vuelta al empezar: la pose inicial ya la fija el filtro de
+        # partículas, y la primera mirada llega después del primer tramo.
+        self.recorrido_desde_mirada = 0.0
         # Ya girando, un impacto que entra hasta HOLGURA_MIRADA en el círculo
         # (ruido del scan en el límite) no corta la vuelta; si entra más, el
         # robot espera quieto hasta ESPERA_MIRADA_S sin perder lo girado.
@@ -204,8 +202,11 @@ class Explorador(Node):
         self.observaciones_fallidas = {}
         self.cursores_observacion = {}
         self.cache_busquedas = {}
-        self.turnos_busqueda = {}
         self.rondas_observacion = {}
+        # Zonas cuya búsqueda de punto de observación terminó sin resultado.
+        # A diferencia de zonas_sin_destino, no se vacía al cambiar la
+        # orientación de la huella: solo con un mapa o una grilla nuevos.
+        self.zonas_inobservables = set()
         self.cache_zonas_alcanzables = {}
         self.busqueda_pendiente = False
         self.estado = ESTADO_INICIALIZANDO
@@ -277,8 +278,8 @@ class Explorador(Node):
         self.observaciones_fallidas.clear()
         self.cursores_observacion.clear()
         self.cache_busquedas.clear()
-        self.turnos_busqueda.clear()
         self.rondas_observacion.clear()
+        self.zonas_inobservables.clear()
         self.cache_zonas_alcanzables.clear()
         ocupado = datos != 0  # pared o desconocido: no confiar
 
@@ -408,8 +409,8 @@ class Explorador(Node):
             self.observaciones_fallidas.clear()
             self.cursores_observacion.clear()
             self.cache_busquedas.clear()
-            self.turnos_busqueda.clear()
             self.rondas_observacion.clear()
+            self.zonas_inobservables.clear()
             self.cache_zonas_alcanzables.clear()
         self.no_cubiertas = (datos == 100)
         self.celdas_cubiertas = int(np.count_nonzero(datos == 0))
@@ -464,8 +465,8 @@ class Explorador(Node):
         self.observaciones_fallidas.clear()
         self.cursores_observacion.clear()
         self.cache_busquedas.clear()
-        self.turnos_busqueda.clear()
         self.rondas_observacion.clear()
+        self.zonas_inobservables.clear()
         self.cache_zonas_alcanzables.clear()
         self.pose_inicial_confirmada = True
         self.momento_confirmacion = self.get_clock().now()
@@ -543,8 +544,7 @@ class Explorador(Node):
     def celda_no_cubierta_mas_cercana(self, fila_r: int, col_r: int, preferidas=None):
         """Conserva un objetivo válido y prioriza nuevas zonas alcanzables."""
         candidatas = self.no_cubiertas.copy()
-        for celda in set(self.zonas_sin_destino) | {
-                z for z in self.rondas_observacion if self.zona_agotada(z)}:
+        for celda in set(self.zonas_sin_destino) | self.zonas_inobservables:
             if (0 <= celda[0] < candidatas.shape[0]
                     and 0 <= celda[1] < candidatas.shape[1]):
                 candidatas[celda] = False
@@ -817,28 +817,9 @@ class Explorador(Node):
         self.cursores_observacion.pop(clave, None)
         return None
 
-    def ceder_turno_busqueda(self, zona):
-        """Da oportunidad a otras zonas conservando el cursor de búsqueda."""
-        turnos = self.turnos_busqueda.get(zona, 0) + 1
-        self.turnos_busqueda[zona] = turnos
-        if turnos < 10:
-            return False
-        self.objetivos_pendientes[zona] = (
-            self.get_clock().now().nanoseconds / 1e9 + self.reintento_objetivo_s)
-        self.turnos_busqueda[zona] = 0
-        self.rondas_observacion[zona] = self.rondas_observacion.get(zona, 0) + 1
-        if self.zona_agotada(zona):
-            self.get_logger().warn(
-                f'Zona {zona}: {RONDAS_MAXIMAS_OBSERVACION} rondas sin punto de observación; '
-                'se descarta hasta que cambie el mapa. Sigue sin cubrir.')
-        return True
-
-    def zona_agotada(self, zona):
-        return self.rondas_observacion.get(zona, 0) >= RONDAS_MAXIMAS_OBSERVACION
-
     def zona_descartada(self, zona):
-        """Sin destino conocido o con todas sus rondas de búsqueda gastadas."""
-        return zona in self.zonas_sin_destino or self.zona_agotada(zona)
+        """Sin destino conocido o sin punto de observación posible."""
+        return zona in self.zonas_sin_destino or zona in self.zonas_inobservables
 
     def calcular_camino(self, libres, costos, inicio, objetivo):
         """Ejecuta solo cálculo numérico fuera del executor ROS y reutiliza el grafo."""
@@ -1207,10 +1188,9 @@ class Explorador(Node):
                     self.detener()
                 objetivo_mundo = self.punto_para_observar(objetivo_grueso, x_r, y_r)
                 if self.busqueda_pendiente:
-                    if self.ceder_turno_busqueda(objetivo_grueso):
-                        self.get_logger().info(
-                            f'Búsqueda de {objetivo_grueso} cede el turno a otras zonas; '
-                            'se conserva el progreso de búsqueda.')
+                    # Se sigue con la misma zona hasta terminar, con el robot
+                    # quieto: ceder el turno a otra zona lejana hacía que el
+                    # robot fuera y viniera entre zonas sin punto de observación.
                     self.get_logger().info(
                         f'Buscando punto de observación para {objetivo_grueso} por etapas.',
                         throttle_duration_sec=10.0)
@@ -1219,6 +1199,7 @@ class Explorador(Node):
                     return
             if objetivo_mundo is None:
                 self.zonas_sin_destino.add(objetivo_grueso)
+                self.zonas_inobservables.add(objetivo_grueso)
                 self.get_logger().warn(
                     f'Zona {objetivo_grueso} sin punto de observación alcanzable y visible; '
                     'se excluye como destino hasta actualizar el mapa. Sigue sin cubrir.')

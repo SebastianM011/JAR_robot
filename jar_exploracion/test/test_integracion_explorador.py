@@ -407,11 +407,20 @@ def preparar_mirada(nodo, ancho_pasillo=None):
     tf = TransformStamped()
     tf.transform.rotation.w = 1.0
     buffer.lookup_transform_full.return_value = tf
+    # Mirada vencida: ya recorrió un tramo.
+    n.recorrido_desde_mirada = n.distancia_entre_miradas
     return n
 
 
+def test_no_gira_al_empezar_a_explorar(nodo):
+    n = preparar_mirada(nodo)
+    n.recorrido_desde_mirada = 0.0
+    assert not n.mirar_alrededor((0.5, 0.5, 0.0))
+    assert not n.mirada.activa
+
+
 def test_mirada_gira_en_el_lugar_en_espacio_abierto(nodo):
-    """Al empezar a explorar mira alrededor: solo velocidad angular."""
+    """Después de un tramo mira alrededor: solo velocidad angular."""
     n = preparar_mirada(nodo)
     assert n.mirar_alrededor((0.5, 0.5, 0.0))
     cmd = n.pub_cmd_vel.publish.call_args.args[0]

@@ -71,7 +71,7 @@ def test_zonas_sin_destino_no_son_cobertura_completa():
     nodo.celdas_cubiertas = 0
     nodo.porcentaje_objetivo = 95.0
     nodo.zonas_sin_destino = {(0, 0)}
-    nodo.rondas_observacion = {}
+    nodo.zonas_inobservables = set()
     nodo.momento_sin_destinos = None
     reloj = Mock()
     reloj.now.return_value.nanoseconds = 0
@@ -153,27 +153,6 @@ def test_velocidad_segun_recorrido_restante():
     assert nodo.vector_hacia(0., 0., 0., (0., 0.), 1.0) == (0., 0., 0.)
 
 
-def test_busqueda_costosa_cede_turno_sin_perder_cursor():
-    """Una búsqueda pendiente no monopoliza la elección de objetivos."""
-    from unittest.mock import Mock
-
-    nodo = Explorador.__new__(Explorador)
-    reloj = Mock()
-    reloj.now.return_value.nanoseconds = int(20e9)
-    nodo.get_clock = lambda: reloj
-    nodo.turnos_busqueda = {}
-    nodo.rondas_observacion = {}
-    nodo.objetivos_pendientes = {}
-    nodo.reintento_objetivo_s = 10.0
-    clave = ((2, 3), 1, 5.0)
-    nodo.cursores_observacion = {clave: 128}
-    for _ in range(9):
-        assert not nodo.ceder_turno_busqueda((2, 3))
-    assert nodo.ceder_turno_busqueda((2, 3))
-    assert nodo.objetivos_pendientes[(2, 3)] == 30.0
-    assert nodo.cursores_observacion[clave] == 128
-
-
 def test_priorizar_destinos_directos_y_rotar_busquedas():
     """Una zona cercana difícil no bloquea zonas navegables ni zonas aún no probadas."""
     from unittest.mock import Mock
@@ -184,6 +163,7 @@ def test_priorizar_destinos_directos_y_rotar_busquedas():
     nodo.get_clock = lambda: reloj
     nodo.no_cubiertas = np.array([[True, False, True, True]])
     nodo.zonas_sin_destino = set()
+    nodo.zonas_inobservables = set()
     nodo.objetivos_pendientes = {}
     nodo.objetivo_mision = None
     nodo.rondas_observacion = {(0, 0): 1}
@@ -263,6 +243,7 @@ def test_objetivo_persistente_hasta_cubrir_o_rechazar():
     nodo.get_clock = lambda: reloj
     nodo.no_cubiertas = np.array([[True, False, False, False, True]])
     nodo.zonas_sin_destino = set()
+    nodo.zonas_inobservables = set()
     nodo.objetivos_pendientes = {}
     nodo.rondas_observacion = {}
     nodo.observaciones_fallidas = {}
@@ -282,8 +263,8 @@ def test_objetivo_persistente_hasta_cubrir_o_rechazar():
     assert nodo.objetivo_mision is None
 
 
-def test_zonas_agotadas_se_descartan_y_sin_destinos_se_regresa():
-    """Dos rondas sin punto de observación descartan la zona; sin destinos, vuelve."""
+def test_zona_inobservable_persiste_y_sin_destinos_se_regresa():
+    """Una zona sin punto de observación queda descartada; sin destinos, vuelve."""
     from unittest.mock import Mock
     from jar_exploracion import explorador
     from jar_exploracion.explorador import ESTADO_EXPLORANDO, ESTADO_REGRESANDO
@@ -293,15 +274,10 @@ def test_zonas_agotadas_se_descartan_y_sin_destinos_se_regresa():
     reloj = Mock()
     reloj.now.return_value.nanoseconds = 0
     nodo.get_clock = lambda: reloj
-    nodo.reintento_objetivo_s = 10.0
-    nodo.objetivos_pendientes = {}
-    nodo.turnos_busqueda = {}
-    nodo.rondas_observacion = {}
     nodo.zonas_sin_destino = set()
-    zona = (0, 0)
-    for _ in range(10 * explorador.RONDAS_MAXIMAS_OBSERVACION):
-        nodo.ceder_turno_busqueda(zona)
-    assert nodo.zona_descartada(zona)
+    nodo.zonas_inobservables = set()
+    nodo.zonas_inobservables = {(0, 0)}
+    assert nodo.zona_descartada((0, 0))
 
     nodo.estado = ESTADO_EXPLORANDO
     nodo.no_cubiertas = np.array([[True, False]])

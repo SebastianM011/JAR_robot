@@ -217,8 +217,8 @@ Si no existe paso con el margen requerido, no fuerza el paso.
 
 La cobertura se marca con el láser, que ve 360°, pero las víctimas se confirman
 con la cámara, que mira solo hacia adelante (unos 61° de campo visual), y el
-explorador se traslada sin girar. Para que la cámara vea todo, al empezar a explorar
-y cada `distancia_entre_miradas` (1.5 m) el robot gira 360° en el lugar en
+explorador se traslada sin girar. Para que la cámara vea todo, cada
+`distancia_entre_miradas` (1.5 m, sin vuelta al empezar: la pose ya la fija el filtro) el robot gira 360° en el lugar en
 `pasos_mirada` tramos de 45°, con una pausa de `pausa_mirada_s` en cada uno.
 En las pausas la imagen sale nítida y `detector_scan` no la descarta por girar
 rápido (`giro_maximo`).
@@ -240,12 +240,15 @@ mirar y no gira.
 
 ### Zonas sin punto de observación
 
-Una zona sin destino directo busca por etapas un punto desde donde verla y, si tarda,
-cede el turno a otras zonas. Con dos zonas difíciles en puntas opuestas del mapa,
-el robot iba y venía entre ellas sin terminar. Ahora cada zona tiene 2 rondas de
-búsqueda (`RONDAS_MAXIMAS_OBSERVACION`); después se descarta hasta que cambie el
-mapa. Si todas las zonas que quedan están descartadas durante 10 s, el robot vuelve
-al origen con el porcentaje que tenga, y en ese momento se reportan las víctimas.
+Una zona sin destino directo busca por etapas (unos milisegundos por ciclo) un punto
+desde donde verla, con el robot quieto, hasta terminar. Antes, si tardaba, cedía el
+turno a la zona más cercana con menos intentos, que podía estar del otro lado del
+laberinto: el robot iba y venía entre zonas que nunca iba a poder ver. Si la
+búsqueda termina sin punto, la zona queda en `zonas_inobservables` hasta que llegue
+un mapa o una grilla nuevos; antes el descarte se borraba cada vez que cambiaba la
+orientación del robot. Si todas las zonas que quedan están descartadas durante
+10 s, el robot vuelve al origen con el porcentaje que tenga, y en ese momento se
+reportan las víctimas.
 
 ## Obstáculos que no están en el mapa
 
