@@ -262,6 +262,15 @@ mirar y no gira.
   angostos, y solo se arrima a un costado si un obstáculo del scan no deja otra.
   Dentro de una zona, el destino es la celda con más holgura. En `maze_1_6x5`, el
   paso junto a la caja azul pasó de rozarla a dejar al menos 9.8 cm reales.
+- **Desvío en vez de frenar.** Si el barrido de la huella en la dirección pedida
+  toca algo, el robot prueba girar esa dirección de 15° en 15° hasta 90° (primero
+  los desvíos chicos; a igual ángulo, el lado que más lo aleja de los obstáculos) y
+  valida cada opción solo contra el scan, que no depende del error de localización.
+  Si ya está más cerca que el margen, vale cualquier dirección que no lo acerque.
+  Con la pose corrida unos centímetros, el camino del mapa roza una pared real; antes
+  el robot quedaba frenado ahí. En una simulación de la curva de la caja azul con la
+  pose corrida 5 cm en 7 direcciones, sin desvío queda frenado en 6 casos y con desvío
+  pasa en los 7, sin bajar de 1.9 cm de holgura real.
 - **Orientación.** La huella se calcula alineada con el eje del mapa más cercano si
   el robot está a menos de ~6° de él, y el control corrige ese desvío mientras avanza.
   Antes, cada 1.7° de deriva recalculaba el espacio libre y frenaba el robot.

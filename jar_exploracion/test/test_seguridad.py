@@ -8,8 +8,8 @@ import pytest
 
 from jar_exploracion.planificador import a_estrella
 from jar_exploracion.seguridad import (
-    celda_libre_cercana, distancia_huella, escape_seguro, espacio_transitable, puntos_scan,
-    regular_traslacion)
+    buscar_desvio, celda_libre_cercana, distancia_huella, escape_seguro, espacio_transitable,
+    puntos_scan, regular_traslacion)
 
 
 @pytest.mark.parametrize('ancho_pasillo, admisible', [
@@ -146,3 +146,24 @@ def test_escape_seguro_no_acerca_el_chasis_al_scan():
     assert escape_seguro(pared, 0.37, 0.24, (0.0, 0.02))
     assert not escape_seguro(pared, 0.37, 0.24, (0.0, -0.02))
     assert escape_seguro(np.zeros((0, 2)), 0.37, 0.24, (0.02, 0.0))
+
+
+def test_desvio_esquiva_una_pared_que_corta_el_avance():
+    """Avanzando en +x con una esquina adelante a la izquierda, se desvía a la derecha."""
+    # Ya a 1.5 cm del frente (menos que el margen de 2 cm).
+    esquina = np.array([[x, y] for x in np.arange(0.20, 0.6, 0.01) for y in (0.10, 0.13)])
+    bloqueada = regular_traslacion((0.1, 0.0), esquina, 0.37, 0.24, 0.02, 0.1,
+                                   lambda dx, dy: True)
+    assert bloqueada[1] == 'obstaculo_o_margen'
+    desvio = buscar_desvio((0.1, 0.0), esquina, 0.37, 0.24, 0.02, 0.1)
+    assert desvio is not None
+    (vx, vy), grados = desvio
+    assert grados < 0 and vy < 0 and vx >= -1e-9
+
+
+def test_sin_desvio_si_esta_encerrado():
+    # Caja apenas mayor que la huella: cualquier movimiento acerca algún lado.
+    lados = np.linspace(-1, 1, 41)
+    pared = np.array([[0.21 * u, 0.14 * w] for u in lados for w in (-1, 1)]
+                     + [[0.21 * w, 0.14 * u] for u in lados for w in (-1, 1)])
+    assert buscar_desvio((0.1, 0.0), pared, 0.37, 0.24, 0.02, 0.1) is None

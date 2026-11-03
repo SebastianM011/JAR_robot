@@ -26,8 +26,8 @@ from jar_exploracion.mirada import (MiradaPorPasos, eje_mas_cercano, giro_seguro
 from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
 from jar_exploracion.trazado import celdas_visibles
 from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
-from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espacio_transitable,
-                                       puntos_scan, regular_traslacion)
+from jar_exploracion.seguridad import (buscar_desvio, celda_libre_cercana, escape_seguro,
+                                       espacio_transitable, puntos_scan, regular_traslacion)
 
 FRECUENCIA_HZ = 10.0
 HOLGURA_MIRADA = 0.02
@@ -1323,15 +1323,28 @@ class Explorador(Node):
         # Las paredes del mapa ya tienen margen_seguridad en mapa_seguro; contra
         # el scan se usa el mismo margen que el planificador da a las cajas, o
         # el robot frena en caminos que el planificador sí considera libres.
+        pedida = (vx, vy)
         (vx, vy), motivo = regular_traslacion(
-            (vx, vy), impactos, self.largo_robot, self.ancho_robot,
+            pedida, impactos, self.largo_robot, self.ancho_robot,
             self.margen_obstaculos_scan, self.velocidad_maxima, mapa_seguro,
             horizonte=self.horizonte_colision_s, desaceleracion=self.desaceleracion_segura,
             velocidad_pasillo=self.velocidad_pasillo)
         if motivo == 'obstaculo_o_margen':
-            self.get_logger().warn(
-                'Frenado preventivo: el barrido de la huella no tiene espacio libre.',
-                throttle_duration_sec=5.0)
+            # Con la pose corrida, el camino del mapa puede rozar una pared real:
+            # en vez de quedarse frenado, desviarse hacia donde el scan está libre.
+            desvio = buscar_desvio(
+                pedida, impactos, self.largo_robot, self.ancho_robot,
+                self.margen_obstaculos_scan, self.velocidad_pasillo,
+                horizonte=self.horizonte_colision_s, desaceleracion=self.desaceleracion_segura)
+            if desvio is not None:
+                (vx, vy), grados = desvio
+                self.get_logger().info(
+                    f'Desvío de {grados}° para no rozar lo que ve el scan.',
+                    throttle_duration_sec=5.0)
+            else:
+                self.get_logger().warn(
+                    'Frenado preventivo: el barrido de la huella no tiene espacio libre.',
+                    throttle_duration_sec=5.0)
         self.vx_anterior, self.vy_anterior = vx, vy
 
         cmd = Twist()

@@ -105,6 +105,50 @@ def regular_traslacion(velocidad, puntos, largo, ancho, margen, velocidad_maxima
     return (0.0, 0.0), 'obstaculo_o_margen'
 
 
+def buscar_desvio(velocidad, puntos, largo, ancho, margen, rapidez,
+                  angulos=(15, 30, 45, 60, 75, 90), **kwargs):
+    """
+    Busca la dirección libre más parecida a `velocidad` cuando esa está bloqueada.
+
+    Gira la orden de a `angulos` grados (primero los menores, a cada lado) y la
+    valida solo contra el scan, que está en el marco del robot y no depende del
+    error de localización: con la pose corrida unos centímetros, el mapa marca
+    bloqueado el lado que en realidad está libre. A 90° es un paso de costado.
+    Devuelve ((vx, vy), grados) o None.
+    """
+    v = np.asarray(velocidad, dtype=float)
+    modulo = float(np.linalg.norm(v))
+    if modulo < 1e-6 or puntos is None:
+        return None
+    v = v / modulo * min(modulo, rapidez)
+    puntos = np.asarray(puntos, dtype=float).reshape(-1, 2)
+    if len(puntos):
+        # Si ya está más cerca que el margen, vale cualquier dirección que no lo
+        # acerque más: si no, ni siquiera podría alejarse de la pared.
+        actual = float(np.min(distancia_huella(puntos, largo, ancho)))
+        margen = max(0.0, min(margen, actual - 0.005))
+    horizonte = kwargs.get('horizonte', 0.8)
+    for grados in angulos:
+        libres = []
+        for signo in (1, -1):
+            a = math.radians(grados * signo)
+            c, s = math.cos(a), math.sin(a)
+            candidata = (c * v[0] - s * v[1], s * v[0] + c * v[1])
+            orden, motivo = regular_traslacion(
+                candidata, puntos, largo, ancho, margen, rapidez,
+                lambda dx, dy: True, velocidad_pasillo=rapidez, **kwargs)
+            if motivo == 'avance':
+                final = puntos - np.asarray(orden) * horizonte
+                holgura = (float(np.min(distancia_huella(final, largo, ancho)))
+                           if len(puntos) else math.inf)
+                libres.append((holgura, orden, grados * signo))
+        if libres:
+            # Entre los dos lados, el que más se aleja de lo que ve el scan.
+            _, orden, grados_elegidos = max(libres, key=lambda opcion: opcion[0])
+            return orden, grados_elegidos
+    return None
+
+
 def celda_libre_cercana(libre, celda, radio_celdas):
     """
     Celda libre más cercana a `celda` dentro de `radio_celdas`, o None.
