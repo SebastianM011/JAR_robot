@@ -256,6 +256,12 @@ mirar y no gira.
   `impactos_minimos_scan` (3) scans distintos. En `maze_1_6x5` el localizador tiene
   ~5 cm y 2-4° de error: una pared lejana aparecía corrida 10-20 cm y llenaba el mapa
   de obstáculos falsos (cientos de celdas) que tapaban las puertas.
+- **Caminos por el centro.** El costo de A* mide la holgura real de la huella
+  rectangular (cuántos centímetros extra entran alrededor del robot, de 4 a 16 cm),
+  no la distancia desde su centro. El camino va por el medio de pasillos y pasos
+  angostos, y solo se arrima a un costado si un obstáculo del scan no deja otra.
+  Dentro de una zona, el destino es la celda con más holgura. En `maze_1_6x5`, el
+  paso junto a la caja azul pasó de rozarla a dejar al menos 9.8 cm reales.
 - **Orientación.** La huella se calcula alineada con el eje del mapa más cercano si
   el robot está a menos de ~6° de él, y el control corrige ese desvío mientras avanza.
   Antes, cada 1.7° de deriva recalculaba el espacio libre y frenaba el robot.

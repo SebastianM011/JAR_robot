@@ -632,3 +632,11 @@ def test_con_camino_vigente_no_vuelve_a_elegir_destino(nodo, monkeypatch):
     monkeypatch.setattr(n, 'punto_para_observar', no_llamar)
     n.actuar((0.5, 0.5, 0.0))
     assert n.objetivo_celda == zona
+
+
+def test_costo_centra_el_camino_en_un_pasillo(nodo):
+    """En un pasillo con holgura, el costo es mínimo en el medio y crece hacia las paredes."""
+    n = preparar_mirada(nodo, ancho_pasillo=0.6)
+    costos = [n.costo_fino[n.celda_de(0.5, y, n.info_mapa)] for y in (0.5, 0.45, 0.4)]
+    assert costos[0] <= costos[1] <= costos[2]
+    assert costos[0] < costos[2]

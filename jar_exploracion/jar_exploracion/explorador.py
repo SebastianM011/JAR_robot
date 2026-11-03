@@ -39,6 +39,9 @@ ESPERA_SIN_DESTINOS_S = 10.0
 # alineada y el control corrige el giro: la deriva de las ruedas no cambia
 # el espacio libre en cada ciclo.
 TOLERANCIA_EJE = 0.1
+# Holguras (m) alrededor de la huella con las que se mide el costo de A*:
+# sin holgura cuesta 100 por celda; con la última, nada.
+HOLGURAS_COSTO = (0.04, 0.08, 0.12, 0.16)
 # Veces que una zona puede quedar sin punto de observación alcanzable antes
 # de descartarla: si el que la tapa es el scan, se libera; si son paredes, no.
 INTENTOS_ZONA_INALCANZABLE = 3
@@ -76,7 +79,6 @@ class Explorador(Node):
         self.declare_parameter('tiempo_asentamiento_s', 3.0)
         # Las dimensiones incluyen ruedas y el desplazamiento del chasis respecto de la base.
         self.declare_parameter('margen_seguridad', 0.05)
-        self.declare_parameter('sigma_costo', 0.15)
         self.declare_parameter('timeout_scan_s', 0.5)
         self.declare_parameter('reintento_objetivo_s', 10.0)
         self.declare_parameter('timeout_sin_avance_s', 15.0)
@@ -138,13 +140,12 @@ class Explorador(Node):
 
         self.confirmar_pose_automatica = self.get_parameter('confirmar_pose_automatica').value
         self.margen_seguridad = self.get_parameter('margen_seguridad').value
-        self.sigma_costo = self.get_parameter('sigma_costo').value
         self.timeout_scan_s = self.get_parameter('timeout_scan_s').value
         self.reintento_objetivo_s = self.get_parameter('reintento_objetivo_s').value
         self.timeout_sin_avance_s = self.get_parameter('timeout_sin_avance_s').value
         positivos = (self.largo_robot, self.ancho_robot, self.timeout_pose_s,
                      self.velocidad_maxima, self.ganancia_atractiva,
-                     self.sigma_costo, self.timeout_sin_avance_s,
+                     self.timeout_sin_avance_s,
                      self.velocidad_pasillo, self.horizonte_colision_s,
                      self.desaceleracion_segura)
         if not all(math.isfinite(v) and v > 0 for v in positivos):
@@ -316,35 +317,44 @@ class Explorador(Node):
             self.yaw_huella - yaw_de_quaternion(msg.info.origin.orientation))
         self.componentes_libres, _ = nd.label(self.libre_fino)
 
-        # Costo suave por encima del filtro duro: entre las celdas que sí
-        # pasan, A* va a preferir las más alejadas de la pared cuando haya
-        # margen para elegir -- mismo mecanismo (campana de Gauss sobre la
-        # distancia a la pared) que un costmap inflado tipo Nav2.
-        self.costo_fino = 100.0 * np.exp(-(dist_a_pared ** 2) / (2.0 * self.sigma_costo ** 2))
-
         self.info_mapa = info
+        self.costo_fino = self.costo_por_holgura(
+            datos, self.yaw_huella - yaw_de_quaternion(msg.info.origin.orientation))
         self.camino = None
         self.objetivo_celda = None
         self.seguimiento_avance = None
         self.publicar_camino([])
         self.detener()
 
-    def espacio_libre(self, datos, yaw_mapa):
+    def espacio_libre(self, datos, yaw_mapa, extra=0.0):
         """
         Espacio de configuraciones para la huella con orientación `yaw_mapa`.
 
         Las celdas del mapa usan margen_seguridad; las que solo marcó el scan,
-        margen_obstaculos_scan.
+        margen_obstaculos_scan. `extra` se suma a los dos márgenes.
         """
         libres = espacio_transitable(
             self.datos_mapa, self.info_mapa.resolution, self.largo_robot, self.ancho_robot,
-            self.margen_seguridad + 0.006, yaw_mapa)
+            self.margen_seguridad + 0.006 + extra, yaw_mapa)
         temporales = (datos != 0) & (self.datos_mapa == 0)
         if not temporales.any():
             return libres
         return libres & espacio_transitable(
             np.where(temporales, 100, 0), self.info_mapa.resolution, self.largo_robot,
-            self.ancho_robot, self.margen_obstaculos_scan + 0.006, yaw_mapa)
+            self.ancho_robot, self.margen_obstaculos_scan + 0.006 + extra, yaw_mapa)
+
+    def costo_por_holgura(self, datos, yaw_mapa):
+        """
+        Costo de A* según la holgura que le queda a la huella rectangular.
+
+        Mide cuántos centímetros extra entran alrededor del rectángulo del robot
+        (no la distancia desde su centro), así el camino va por el medio de
+        pasillos y pasos angostos y se arrima a un costado solo si no queda otra.
+        """
+        holgura = np.zeros(datos.shape)
+        for extra in HOLGURAS_COSTO:
+            holgura[self.espacio_libre(datos, yaw_mapa, extra)] = extra
+        return 100.0 * (1.0 - holgura / HOLGURAS_COSTO[-1]) ** 2
 
     def actualizar_orientacion_huella(self, yaw):
         """Recalcula el espacio libre si cambia significativamente la orientación."""
@@ -357,6 +367,7 @@ class Explorador(Node):
         yaw_mapa = yaw - yaw_de_quaternion(self.info_mapa.origin.orientation)
         self.libre_fino = self.espacio_libre(self.datos_planificacion, yaw_mapa)
         self.componentes_libres, _ = nd.label(self.libre_fino)
+        self.costo_fino = self.costo_por_holgura(self.datos_planificacion, yaw_mapa)
         for cache in (self.cache_zonas_alcanzables, self.cache_busquedas,
                       self.puntos_observacion):
             cache.clear()
@@ -403,8 +414,8 @@ class Explorador(Node):
         if np.array_equal(libres, self.libre_fino):
             return
         self.libre_fino = libres
-        distancia = nd.distance_transform_edt(datos == 0) * self.info_mapa.resolution
-        self.costo_fino = 100.0 * np.exp(-(distancia ** 2) / (2.0 * self.sigma_costo ** 2))
+        self.costo_fino = self.costo_por_holgura(
+            datos, self.yaw_huella - yaw_de_quaternion(self.info_mapa.origin.orientation))
         self.componentes_libres, _ = nd.label(libres)
         # Los obstáculos del scan aparecen y vencen todo el tiempo: la búsqueda
         # de observación conserva su progreso y comprueba el alcance al usarlo.
@@ -741,8 +752,11 @@ class Explorador(Node):
                 if self.celda_de(*punto, self.info_grilla) != zona:
                     continue
                 distancia = (punto[0] - centro[0])**2 + (punto[1] - centro[1])**2
-                candidatos.append((distancia, punto))
-        return min(candidatos)[1] if candidatos else None
+                # Primero la holgura de la huella, después la cercanía al centro:
+                # el centro de la zona puede quedar pegado a una pared.
+                costo = self.costo_fino[f, c] if self.costo_fino is not None else 0.0
+                candidatos.append((costo, distancia, punto))
+        return min(candidatos)[2] if candidatos else None
 
     def describir_celda(self, punto, celda):
         """Describe si una posición queda bloqueada por mapa o por margen."""

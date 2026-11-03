@@ -26,6 +26,7 @@ def test_objetivo_en_zona_con_centro_bloqueado(yaw):
     nodo.libre_fino = np.zeros((8, 8), dtype=bool)
     nodo.libre_fino[0, 1] = True
     nodo.libre_fino[4, 4] = True
+    nodo.costo_fino = np.zeros((8, 8))
     punto = nodo.punto_seguro_en_zona((0, 0))
     assert nodo.celda_de(*punto, nodo.info_mapa) == (0, 1)
     assert nodo.celda_de(*punto, nodo.info_grilla) == (0, 0)
@@ -299,3 +300,20 @@ def test_zona_inobservable_persiste_y_sin_destinos_se_regresa():
     reloj.now.return_value.nanoseconds = int(explorador.ESPERA_SIN_DESTINOS_S * 1e9)
     nodo.transicionar((0., 0., 0.))
     assert nodo.estado == ESTADO_REGRESANDO
+
+
+def test_destino_en_zona_prefiere_holgura_al_centro():
+    """Entre celdas libres de la zona gana la de menor costo, no la más central."""
+    nodo = Explorador.__new__(Explorador)
+    nodo.info_mapa = MapMetaData()
+    nodo.info_mapa.resolution = 0.05
+    nodo.info_mapa.origin.orientation.w = 1.0
+    nodo.info_grilla = MapMetaData()
+    nodo.info_grilla.resolution = 0.2
+    nodo.info_grilla.origin = nodo.info_mapa.origin
+    nodo.libre_fino = np.zeros((8, 8), dtype=bool)
+    nodo.libre_fino[1:3, 1:3] = True
+    nodo.costo_fino = np.full((8, 8), 50.0)
+    nodo.costo_fino[1, 1] = 0.0
+    punto = nodo.punto_seguro_en_zona((0, 0))
+    assert nodo.celda_de(*punto, nodo.info_mapa) == (1, 1)
