@@ -103,3 +103,39 @@ def regular_traslacion(velocidad, puntos, largo, ancho, margen, velocidad_maxima
         if libre:
             return tuple(map(float, candidata)), 'avance' if escala == 1 else 'velocidad_reducida'
     return (0.0, 0.0), 'obstaculo_o_margen'
+
+
+def celda_libre_cercana(libre, celda, radio_celdas):
+    """
+    Celda libre más cercana a `celda` dentro de `radio_celdas`, o None.
+
+    Sirve para salir cuando el robot quedó dentro del margen de una pared:
+    su propia celda no es transitable aunque el chasis no toque nada.
+    """
+    fila, col = celda
+    alto, ancho = libre.shape
+    f0, f1 = max(0, fila - radio_celdas), min(alto, fila + radio_celdas + 1)
+    c0, c1 = max(0, col - radio_celdas), min(ancho, col + radio_celdas + 1)
+    filas, cols = np.nonzero(libre[f0:f1, c0:c1])
+    if not len(filas):
+        return None
+    distancias = np.hypot(filas + f0 - fila, cols + c0 - col)
+    i = int(np.argmin(distancias))
+    if distancias[i] > radio_celdas:
+        return None
+    return int(filas[i] + f0), int(cols[i] + c0)
+
+
+def escape_seguro(puntos, largo, ancho, desplazamiento, minimo=0.01):
+    """
+    Indica si mover la huella `desplazamiento` (base_footprint) no la acerca al scan.
+
+    Acepta si después del paso la distancia mínima a los impactos queda por
+    encima de `minimo` o no empeora.
+    """
+    puntos = np.asarray(puntos, dtype=float).reshape(-1, 2)
+    if not len(puntos):
+        return True
+    antes = float(np.min(distancia_huella(puntos, largo, ancho)))
+    despues = float(np.min(distancia_huella(puntos - np.asarray(desplazamiento), largo, ancho)))
+    return despues >= minimo or despues >= antes

@@ -8,7 +8,8 @@ import pytest
 
 from jar_exploracion.planificador import a_estrella
 from jar_exploracion.seguridad import (
-    distancia_huella, espacio_transitable, puntos_scan, regular_traslacion)
+    celda_libre_cercana, distancia_huella, escape_seguro, espacio_transitable, puntos_scan,
+    regular_traslacion)
 
 
 @pytest.mark.parametrize('ancho_pasillo, admisible', [
@@ -129,3 +130,19 @@ def test_subdivision_encuentra_centro_sin_adelgazar_paredes():
     assert a_estrella(subdividido, (9, 20), (9, 100)) is not None
     assert np.count_nonzero(fino == 100) * 0.025**2 == pytest.approx(
         np.count_nonzero(datos == 100) * 0.05**2)
+
+
+def test_celda_libre_cercana():
+    libre = np.zeros((10, 10), dtype=bool)
+    libre[2, 8] = libre[9, 9] = True
+    assert celda_libre_cercana(libre, (2, 5), 4) == (2, 8)
+    assert celda_libre_cercana(libre, (2, 5), 2) is None
+    assert celda_libre_cercana(np.zeros((5, 5), dtype=bool), (2, 2), 3) is None
+
+
+def test_escape_seguro_no_acerca_el_chasis_al_scan():
+    """Alejarse de una pared vale; ir hacia ella, no."""
+    pared = np.array([[0.0, -0.13], [0.1, -0.13], [-0.1, -0.13]])
+    assert escape_seguro(pared, 0.37, 0.24, (0.0, 0.02))
+    assert not escape_seguro(pared, 0.37, 0.24, (0.0, -0.02))
+    assert escape_seguro(np.zeros((0, 2)), 0.37, 0.24, (0.02, 0.0))

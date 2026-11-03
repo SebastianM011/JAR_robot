@@ -26,7 +26,8 @@ from jar_exploracion.mirada import MiradaPorPasos, giro_seguro, radio_de_giro
 from jar_exploracion.planificador import PlanificadorCompilado, segmento_transitable
 from jar_exploracion.trazado import trazar_rayo
 from jar_exploracion.monitor_movimiento import DetectorDeslizamiento
-from jar_exploracion.seguridad import espacio_transitable, puntos_scan, regular_traslacion
+from jar_exploracion.seguridad import (celda_libre_cercana, escape_seguro, espacio_transitable,
+                                       puntos_scan, regular_traslacion)
 
 FRECUENCIA_HZ = 10.0
 
@@ -87,6 +88,10 @@ class Explorador(Node):
         # Margen para obstáculos que solo ve el scan (cajas). Las paredes del mapa,
         # dibujadas más gruesas que las reales, conservan margen_seguridad.
         self.declare_parameter('margen_obstaculos_scan', 0.02)
+        # Si el robot queda dentro del margen de una pared, se aleja despacio
+        # hasta la celda libre más cercana dentro de este radio.
+        self.declare_parameter('radio_escape', 0.20)
+        self.declare_parameter('velocidad_escape', 0.06)
 
         self.largo_robot = self.get_parameter('largo_robot').value
         self.ancho_robot = self.get_parameter('ancho_robot').value
@@ -144,6 +149,8 @@ class Explorador(Node):
         self.distancia_entre_miradas = self.get_parameter('distancia_entre_miradas').value
         self.distancia_pared_conocida = self.get_parameter('distancia_pared_conocida').value
         self.margen_obstaculos_scan = self.get_parameter('margen_obstaculos_scan').value
+        self.radio_escape = self.get_parameter('radio_escape').value
+        self.velocidad_escape = self.get_parameter('velocidad_escape').value
         if self.distancia_pared_conocida < 0 or self.margen_obstaculos_scan < 0:
             raise ValueError(
                 'distancia_pared_conocida y margen_obstaculos_scan no pueden ser negativos')
@@ -1130,6 +1137,8 @@ class Explorador(Node):
             if objetivo_mundo is None:
                 celda_robot = self.celda_fina_segura(x_r, y_r)
                 if celda_robot is None or not self.libre_fino[celda_robot]:
+                    if self.salir_del_margen(x_r, y_r, yaw_r, impactos):
+                        return
                     self.get_logger().warn(
                         'No se buscan puntos de observación: posición del robot bloqueada.',
                         throttle_duration_sec=10.0)
@@ -1231,6 +1240,48 @@ class Explorador(Node):
         cmd.linear.y = vy
         self.velocidad_ordenada = math.hypot(vx, vy)
         self.pub_cmd_vel.publish(cmd)
+
+    def salir_del_margen(self, x_r, y_r, yaw_r, impactos):
+        """
+        Aleja el robot hacia la celda libre más cercana si quedó dentro del margen.
+
+        Sin esto el explorador se queda detenido: desde una celda no transitable
+        no busca puntos de observación ni planifica. Devuelve False si no hay
+        celda libre cerca o si el paso acercaría el chasis a un impacto del scan.
+        """
+        celda = self.celda_fina_segura(x_r, y_r)
+        if celda is None:
+            return False
+        resolucion = self.info_mapa.resolution
+        destino = celda_libre_cercana(
+            self.libre_fino, celda, math.ceil(self.radio_escape / resolucion))
+        if destino is None:
+            return False
+        # Celdas -> metros en el frame del mapa y luego en base_footprint.
+        yaw_mapa = yaw_de_quaternion(self.info_mapa.origin.orientation)
+        d_col, d_fila = destino[1] - celda[1], destino[0] - celda[0]
+        dx_m = (math.cos(yaw_mapa) * d_col - math.sin(yaw_mapa) * d_fila) * resolucion
+        dy_m = (math.sin(yaw_mapa) * d_col + math.cos(yaw_mapa) * d_fila) * resolucion
+        distancia = math.hypot(dx_m, dy_m)
+        if distancia < 1e-6:
+            return False
+        c, sn = math.cos(yaw_r), math.sin(yaw_r)
+        ux, uy = (c * dx_m + sn * dy_m) / distancia, (-sn * dx_m + c * dy_m) / distancia
+        if not escape_seguro(impactos, self.largo_robot, self.ancho_robot,
+                             (0.02 * ux, 0.02 * uy)):
+            return False
+        self.get_logger().warn(
+            f'Robot dentro del margen de una pared: me alejo {100 * distancia:.0f} cm '
+            'hacia la celda libre más cercana.', throttle_duration_sec=5.0)
+        self.camino = None
+        self.publicar_camino([])
+        cmd = Twist()
+        cmd.linear.x = self.velocidad_escape * ux
+        cmd.linear.y = self.velocidad_escape * uy
+        self.vx_anterior, self.vy_anterior = cmd.linear.x, cmd.linear.y
+        self.velocidad_ordenada = self.velocidad_escape
+        self.pub_cmd_vel.publish(cmd)
+        return True
 
     # ---------- control ----------
 

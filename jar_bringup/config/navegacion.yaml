@@ -57,7 +57,10 @@ explorador:
     desaceleracion_segura: 0.4
     subdivisiones_mapa: 2
     timeout_sin_avance_s: 15.0
-    margen_seguridad: 0.05
+    # Las paredes de los mapas miden 10 cm y las de los mundos 2 cm: el mapa
+    # ya deja 4 cm de más por lado. Con 5 cm el robot quedaba "bloqueado"
+    # al rozar el margen en pasos angostos.
+    margen_seguridad: 0.03
     timeout_scan_s: 0.5
     tiempo_asentamiento_s: 3.0
     # Giro de 360° en 8 pasos de 45° con pausas, cada 1.5 m recorridos, para que
@@ -71,3 +74,7 @@ explorador:
     # margen en vez de margen_seguridad. Ver README.
     distancia_pared_conocida: 0.10
     margen_obstaculos_scan: 0.02
+    # Si queda dentro del margen de una pared, se aleja despacio hasta la
+    # celda libre más cercana (hasta 20 cm) en vez de quedarse detenido.
+    radio_escape: 0.20
+    velocidad_escape: 0.06

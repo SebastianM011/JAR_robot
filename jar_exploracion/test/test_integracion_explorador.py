@@ -1,5 +1,6 @@
 """Prueba callbacks y control con mensajes reales y transporte ROS interceptado."""
 
+import math
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -489,3 +490,21 @@ def test_frenado_usa_el_margen_de_obstaculos_del_scan(nodo, monkeypatch):
         n.futuro_plan.result(timeout=5)
         n.actuar((0.5, 0.5, 0.0))
     assert usados and all(m == n.margen_obstaculos_scan for m in usados)
+
+
+def test_sale_del_margen_de_una_pared_en_vez_de_quedarse_bloqueado(nodo):
+    """Pegado a la pared de abajo, ordena alejarse hacia +y despacio."""
+    n = preparar_mirada(nodo)
+    x, y = 0.5, 0.17
+    assert not n.libre_fino[n.celda_fina_segura(x, y)]
+    n.pub_cmd_vel.reset_mock()
+    assert n.salir_del_margen(x, y, 0.0, np.zeros((0, 2)))
+    cmd = n.pub_cmd_vel.publish.call_args[0][0]
+    assert cmd.linear.y > 0.0
+    assert math.hypot(cmd.linear.x, cmd.linear.y) <= n.velocidad_escape + 1e-9
+
+
+def test_no_sale_del_margen_si_el_scan_lo_impide(nodo):
+    n = preparar_mirada(nodo)
+    caja = np.array([[0.0, 0.13], [0.1, 0.13], [-0.1, 0.13]])
+    assert not n.salir_del_margen(0.5, 0.17, 0.0, caja)
