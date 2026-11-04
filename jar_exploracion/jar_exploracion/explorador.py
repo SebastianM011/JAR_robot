@@ -88,7 +88,7 @@ class Explorador(Node):
         self.declare_parameter('velocidad_pasillo', 0.10)
         self.declare_parameter('horizonte_colision_s', 0.8)
         self.declare_parameter('desaceleracion_segura', 0.4)
-        self.declare_parameter('subdivisiones_mapa', 2)
+        self.declare_parameter('subdivisiones_mapa', 1)
         self.declare_parameter('porcentaje_objetivo', 98.0)
         # Giro de 360° por pasos para que la cámara mire alrededor; 0 lo desactiva.
         self.declare_parameter('distancia_entre_miradas', 1.5)
